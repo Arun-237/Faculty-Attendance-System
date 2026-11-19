@@ -53,6 +53,13 @@ function App() {
   const [classStudents, setClassStudents] = useState([])
   const [attendanceStatus, setAttendanceStatus] = useState({})
   const [attendanceReport, setAttendanceReport] = useState([])
+  const [studentFilterDate, setStudentFilterDate] = useState('')
+  const [studentFilterSubject, setStudentFilterSubject] = useState('')
+  const [reportFilterDate, setReportFilterDate] = useState('')
+  const [reportFilterSubject, setReportFilterSubject] = useState('')
+  const [reportFilterClass, setReportFilterClass] = useState('')
+  const [hodReportMode, setHodReportMode] = useState('Daily')
+  const [reportStatus, setReportStatus] = useState({})
 
   function beginRoleLogin(role) {
     setRoleLoginFor(role)
@@ -86,7 +93,10 @@ function App() {
       setPortalCredentials(credentials)
       if (role !== 'Student') {
         if (role === 'HOD') await loadHodReport(credentials)
-        if (role === 'Faculty' || role === 'Administrator') await loadClassStudents(selectedClass, credentials)
+        if (role === 'Faculty' || role === 'Administrator') {
+          await loadClassStudents(selectedClass, credentials)
+          await loadPortalReport(credentials)
+        }
       }
       setView('portal')
     } catch (loginError) {
@@ -152,8 +162,11 @@ function App() {
     setStudentPassword('')
   }
 
-  async function loadStudentAttendance(credentials) {
-    const response = await fetch('http://localhost:8080/api/student/attendance', {
+  async function loadStudentAttendance(credentials, filterDate = studentFilterDate, filterSubject = studentFilterSubject) {
+    const params = new URLSearchParams()
+    if (filterDate) params.set('date', filterDate)
+    if (filterSubject) params.set('subject', filterSubject)
+    const response = await fetch(`http://localhost:8080/api/student/attendance${params.size ? `?${params}` : ''}`, {
       headers: { Authorization: `Basic ${credentials}` },
     })
     if (response.ok) setAttendance(await response.json())
@@ -172,12 +185,56 @@ function App() {
     }
   }
 
-  async function loadHodReport(credentials = portalCredentials) {
+  async function loadHodReport(credentials = portalCredentials, date = reportFilterDate, subject = reportFilterSubject, section = reportFilterClass, mode = hodReportMode) {
     if (!credentials) return
-    const response = await fetch('http://localhost:8080/api/hod/attendance/report', {
+    const params = new URLSearchParams()
+    if (date && mode === 'Daily') params.set('date', date)
+    if (subject) params.set('subject', subject)
+    if (section) params.set('section', section)
+    const endpoint = mode === 'Overall'
+      ? '/api/hod/attendance/overall'
+      : '/api/hod/attendance/report'
+    const response = await fetch(`http://localhost:8080${endpoint}${params.size ? `?${params}` : ''}`, {
       headers: { Authorization: `Basic ${credentials}` },
     })
     if (response.ok) setAttendanceReport(await response.json())
+  }
+
+  async function loadPortalReport(credentials = portalCredentials, date = reportFilterDate, subject = reportFilterSubject, section = reportFilterClass) {
+    if (!credentials) return
+    const params = new URLSearchParams()
+    if (date) params.set('date', date)
+    if (subject) params.set('subject', subject)
+    if (section) params.set('section', section)
+    const role = activeRole === 'Administrator' ? 'administrator' : 'faculty'
+    const response = await fetch(`http://localhost:8080/api/${role}/attendance/report${params.size ? `?${params}` : ''}`, {
+      headers: { Authorization: `Basic ${credentials}` },
+    })
+    if (response.ok) setAttendanceReport(await response.json())
+  }
+
+  async function saveReportRecord(record) {
+    const status = reportStatus[`${record.studentId}-${record.date}-${record.subject}`] || record.status
+    try {
+      const response = await fetch('http://localhost:8080/api/administrator/students/attendance/daily', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${portalCredentials}`,
+        },
+        body: JSON.stringify({
+          date: record.date,
+          subject: record.subject,
+          records: [{ studentId: record.studentId, status }],
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Attendance update failed')
+      setApiResult({ title: 'Attendance updated', permissions: result.message })
+      await loadPortalReport(portalCredentials)
+    } catch (saveError) {
+      setError(saveError.message)
+    }
   }
 
   async function saveDailyAttendance() {
@@ -317,6 +374,7 @@ function App() {
         await loadHodReport(credentials)
       } else if (activeRole === 'Faculty' || activeRole === 'Administrator') {
         await loadClassStudents(selectedClass, credentials)
+        await loadPortalReport(credentials)
       } else {
         await loadStudentAttendance(credentials)
       }
@@ -330,6 +388,12 @@ function App() {
       return (
         <section className="working-section">
           <h2>{activeSection}</h2>
+          <div className="working-form attendance-editor">
+            <label>Date<input type="date" value={studentFilterDate} onChange={(event) => setStudentFilterDate(event.target.value)} /></label>
+            <label>Subject<select value={studentFilterSubject} onChange={(event) => setStudentFilterSubject(event.target.value)}><option value="">All Subjects</option><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>
+            <button type="button" onClick={() => loadStudentAttendance(portalCredentials)}>Filter Attendance</button>
+            <button type="button" className="text-mode" onClick={() => { setStudentFilterDate(''); setStudentFilterSubject(''); loadStudentAttendance(portalCredentials, '', '') }}>Clear Filters</button>
+          </div>
           <table className="data-table"><thead><tr><th>Date</th><th>Subject</th><th>Status</th></tr></thead><tbody>
             {(attendance?.subjects || []).map((record) => (
               <tr key={`${record.date}-${record.subject}`}><td>{record.date}</td><td>{record.subject}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
@@ -358,6 +422,27 @@ function App() {
           </tbody></table>
           <button type="button" className="text-mode" onClick={() => setAttendanceStatus(Object.fromEntries(classStudents.map((student) => [student.studentId, 'P'])))}>Select All Present</button>
           <button type="button" onClick={saveDailyAttendance}>Save Attendance</button>
+          <h3>Attendance Report</h3>
+          <div className="working-form attendance-editor">
+            <label>Date<input type="date" value={reportFilterDate} onChange={(event) => setReportFilterDate(event.target.value)} /></label>
+            <label>Subject<select value={reportFilterSubject} onChange={(event) => setReportFilterSubject(event.target.value)}><option value="">All Subjects</option><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>
+            <label>Class<select value={reportFilterClass} onChange={(event) => setReportFilterClass(event.target.value)}><option value="">All Classes</option><option>Class-A</option><option>Class-B</option></select></label>
+            <button type="button" onClick={() => loadPortalReport(portalCredentials)}>Filter Report</button>
+            <button type="button" className="text-mode" onClick={() => { setReportFilterDate(''); setReportFilterSubject(''); setReportFilterClass(''); loadPortalReport(portalCredentials, '', '', '') }}>Clear Filters</button>
+          </div>
+          <table className="data-table"><thead><tr><th>Date</th><th>Student ID</th><th>Name</th><th>Class</th><th>Subject</th><th>Status</th>{activeRole === 'Administrator' && <th>Update</th>}</tr></thead><tbody>
+            {attendanceReport.map((record) => {
+              const key = `${record.studentId}-${record.date}-${record.subject}`
+              return (
+                <tr key={key}><td>{record.date}</td><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.subject}</td>
+                  <td>{activeRole === 'Administrator' ? (
+                    <select value={reportStatus[key] || record.status} onChange={(event) => setReportStatus((current) => ({ ...current, [key]: event.target.value }))}><option value="P">P - Present</option><option value="AB">AB - Absent</option></select>
+                  ) : (record.status === 'P' ? 'Present' : 'Absent')}</td>
+                  {activeRole === 'Administrator' && <td><button type="button" onClick={() => saveReportRecord(record)}>Save</button></td>}
+                </tr>
+              )
+            })}
+          </tbody></table>
         </section>
       )
     }
@@ -366,11 +451,27 @@ function App() {
       return (
         <section className="working-section">
           <h2>{activeSection}</h2>
-          <table className="data-table"><thead><tr><th>Date</th><th>Student ID</th><th>Name</th><th>Section</th><th>Subject</th><th>Status</th></tr></thead><tbody>
-            {attendanceReport.map((record) => (
-              <tr key={`${record.studentId}-${record.date}-${record.subject}`}><td>{record.date}</td><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.subject}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
-            ))}
-          </tbody></table>
+          <div className="working-form attendance-editor">
+            <label>Report<select value={hodReportMode} onChange={(event) => { setHodReportMode(event.target.value); loadHodReport(portalCredentials, reportFilterDate, reportFilterSubject, reportFilterClass, event.target.value) }}><option>Daily</option><option>Overall</option></select></label>
+            {hodReportMode === 'Daily' && <label>Date<input type="date" value={reportFilterDate} onChange={(event) => setReportFilterDate(event.target.value)} /></label>}
+            <label>Subject<select value={reportFilterSubject} onChange={(event) => setReportFilterSubject(event.target.value)}><option value="">All Subjects</option><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>
+            <label>Class<select value={reportFilterClass} onChange={(event) => setReportFilterClass(event.target.value)}><option value="">All Classes</option><option>Class-A</option><option>Class-B</option></select></label>
+            <button type="button" onClick={() => loadHodReport(portalCredentials)}>Filter Report</button>
+            <button type="button" className="text-mode" onClick={() => { setReportFilterDate(''); setReportFilterSubject(''); setReportFilterClass(''); loadHodReport(portalCredentials, '', '', '', hodReportMode) }}>Clear Filters</button>
+          </div>
+          {hodReportMode === 'Daily' ? (
+            <table className="data-table"><thead><tr><th>Date</th><th>Student ID</th><th>Name</th><th>Section</th><th>Subject</th><th>Status</th></tr></thead><tbody>
+              {attendanceReport.map((record) => (
+                <tr key={`${record.studentId}-${record.date}-${record.subject}`}><td>{record.date}</td><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.subject}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
+              ))}
+            </tbody></table>
+          ) : (
+            <table className="data-table"><thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th>Conducted</th><th>Present</th><th>Absent</th><th>Overall</th></tr></thead><tbody>
+              {attendanceReport.map((record) => (
+                <tr key={record.studentId}><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.conducted}</td><td>{record.attended}</td><td>{record.absent}</td><td>{record.overall}%</td></tr>
+              ))}
+            </tbody></table>
+          )}
         </section>
       )
     }
