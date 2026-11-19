@@ -6,4 +6,6 @@ import java.util.Optional;
 
 public interface StudentRepository extends JpaRepository<StudentAccount, Long> {
     Optional<StudentAccount> findByUsername(String username);
+    Optional<StudentAccount> findByEmail(String email);
+    java.util.List<StudentAccount> findBySectionOrderByUsernameAsc(String section);
 }

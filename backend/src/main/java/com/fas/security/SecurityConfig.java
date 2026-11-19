@@ -64,9 +64,10 @@ public class SecurityConfig {
             if (faculty.isPresent() && faculty.get().isActive()) {
                 return createUser(username, faculty.get().getPassword(), "FACULTY");
             }
-            var student = students.findByUsername(username);
-            if (student.isPresent() && student.get().isActive()) {
-                return createUser(username, student.get().getPassword(), "STUDENT");
+            var studentByEmail = students.findByEmail(username);
+            if (studentByEmail.isPresent() && studentByEmail.get().isActive()) {
+                var studentAccount = studentByEmail.get();
+                return createUser(studentAccount.getUsername(), studentAccount.getPassword(), "STUDENT");
             }
             throw new UsernameNotFoundException("Unknown active account: " + username);
         };
