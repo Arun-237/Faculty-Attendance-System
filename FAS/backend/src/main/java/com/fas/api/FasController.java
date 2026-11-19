@@ -97,8 +97,13 @@ public class FasController {
     }
 
     @GetMapping("/api/student/attendance")
-    public Map<String, Object> studentAttendance(Authentication authentication) {
-        var records = dailyAttendanceRepository.findByStudentUsernameOrderByAttendanceDateDesc(authentication.getName());
+    public Map<String, Object> studentAttendance(Authentication authentication,
+                                                  @RequestParam(required = false) String date,
+                                                  @RequestParam(required = false) String subject) {
+        var records = dailyAttendanceRepository.findByStudentUsernameOrderByAttendanceDateDesc(authentication.getName()).stream()
+                .filter(record -> date == null || date.isBlank() || date.equals(record.getAttendanceDate()))
+                .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
+                .toList();
         int conducted = records.size();
         int attended = (int) records.stream().filter(r -> "P".equals(r.getStatus())).count();
         double overall = conducted == 0 ? 0 : attended * 100.0 / conducted;
@@ -186,23 +191,30 @@ public class FasController {
             @RequestParam(required = false) String date,
             @RequestParam(required = false) String subject,
             @RequestParam(required = false) String section) {
-        return dailyAttendanceRepository.findAllByOrderByAttendanceDateDesc().stream()
-                .filter(record -> date == null || date.isBlank() || date.equals(record.getAttendanceDate()))
-                .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
-                .filter(record -> section == null || section.isBlank()
-                        || section.equals(studentRepository.findByUsername(record.getStudentUsername())
-                                .map(StudentAccount::getSection).orElse("")))
-                .map(record -> {
-                    var student = studentRepository.findByUsername(record.getStudentUsername());
-                    return Map.<String, Object>of(
-                            "studentId", record.getStudentUsername(),
-                            "name", student.map(StudentAccount::getName).orElse(""),
-                            "section", student.map(StudentAccount::getSection).orElse(""),
-                            "date", record.getAttendanceDate(),
-                            "subject", record.getSubjectName(),
-                            "status", record.getStatus()
-                    );
-                }).toList();
+        return dailyAttendanceReport(date, subject, section);
+    }
+
+    @GetMapping("/api/hod/attendance/overall")
+    public List<Map<String, Object>> hodOverallAttendanceReport(
+            @RequestParam(required = false) String subject,
+            @RequestParam(required = false) String section) {
+        return overallAttendanceReport(subject, section);
+    }
+
+    @GetMapping("/api/faculty/attendance/report")
+    public List<Map<String, Object>> facultyAttendanceReport(
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String subject,
+            @RequestParam(required = false) String section) {
+        return dailyAttendanceReport(date, subject, section);
+    }
+
+    @GetMapping("/api/administrator/attendance/report")
+    public List<Map<String, Object>> administratorAttendanceReport(
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String subject,
+            @RequestParam(required = false) String section) {
+        return dailyAttendanceReport(date, subject, section);
     }
 
     @GetMapping("/api/faculty/students/attendance")
@@ -266,6 +278,48 @@ public class FasController {
             dailyAttendanceRepository.save(record);
         }
         return Map.of("message", "Daily attendance saved successfully");
+    }
+
+    private List<Map<String, Object>> dailyAttendanceReport(String date, String subject, String section) {
+        return dailyAttendanceRepository.findAllByOrderByAttendanceDateDesc().stream()
+                .filter(record -> date == null || date.isBlank() || date.equals(record.getAttendanceDate()))
+                .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
+                .filter(record -> section == null || section.isBlank()
+                        || section.equals(studentRepository.findByUsername(record.getStudentUsername())
+                                .map(StudentAccount::getSection).orElse("")))
+                .map(record -> {
+                    var student = studentRepository.findByUsername(record.getStudentUsername());
+                    return Map.<String, Object>of(
+                            "studentId", record.getStudentUsername(),
+                            "name", student.map(StudentAccount::getName).orElse(""),
+                            "section", student.map(StudentAccount::getSection).orElse(""),
+                            "date", record.getAttendanceDate(),
+                            "subject", record.getSubjectName(),
+                            "status", record.getStatus()
+                    );
+                }).toList();
+    }
+
+    private List<Map<String, Object>> overallAttendanceReport(String subject, String section) {
+        return studentRepository.findAll().stream()
+                .filter(student -> section == null || section.isBlank() || section.equals(student.getSection()))
+                .map(student -> {
+                    var records = dailyAttendanceRepository.findByStudentUsernameOrderByAttendanceDateDesc(student.getUsername()).stream()
+                            .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
+                            .toList();
+                    int conducted = records.size();
+                    int attended = (int) records.stream().filter(record -> "P".equals(record.getStatus())).count();
+                    double percentage = conducted == 0 ? 0 : attended * 100.0 / conducted;
+                    return Map.<String, Object>of(
+                            "studentId", student.getUsername(),
+                            "name", student.getName() == null ? "" : student.getName(),
+                            "section", student.getSection() == null ? "" : student.getSection(),
+                            "conducted", conducted,
+                            "attended", attended,
+                            "absent", conducted - attended,
+                            "overall", Math.round(percentage * 10.0) / 10.0
+                    );
+                }).toList();
     }
 
     private Map<String, String> updateAttendance(AttendanceUpdateRequest request) {
