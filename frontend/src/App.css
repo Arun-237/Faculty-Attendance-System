@@ -15,6 +15,7 @@
   min-height: 100vh;
   background:
     radial-gradient(circle at 85% 12%, rgba(34, 211, 238, 0.12), transparent 22rem),
+    radial-gradient(circle at 10% 42%, rgba(139, 92, 246, 0.08), transparent 24rem),
     var(--background);
 }
 
@@ -43,7 +44,13 @@
 .public-brand small { color: var(--muted); margin-top: 2px; }
 .public-header nav { display: flex; gap: 34px; }
 .public-header nav a { position: relative; color: #475569; text-decoration: none; font-weight: 700; transition: color .2s ease; }
+.public-header nav a::after {
+  content: ""; position: absolute; left: 0; right: 100%; bottom: -7px; height: 2px;
+  border-radius: 9px; background: linear-gradient(90deg, var(--blue), var(--violet));
+  transition: right .22s ease;
+}
 .public-header nav a:hover { color: var(--blue); }
+.public-header nav a:hover::after { right: 0; }
 .portal-button, .hero-actions button, .portal-cards button, .working-form button, .portal-actions button {
   transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
 }
@@ -70,6 +77,7 @@
 .hero::after {
   content: ""; position: absolute; width: 420px; height: 420px; right: -220px; bottom: -260px;
   border: 70px solid rgba(255,255,255,.035); border-radius: 50%;
+  animation: float-ring 12s ease-in-out infinite;
 }
 .hero > div:first-child { max-width: 720px; z-index: 1; }
 .hero p { color: #67e8f9; text-transform: uppercase; letter-spacing: .16em; font-size: 12px; font-weight: 900; }
@@ -114,6 +122,9 @@
   transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
 }
 .portal-cards article:hover { transform: translateY(-7px); border-color: #bfdbfe; box-shadow: 0 20px 44px rgba(59,130,246,.12); }
+.portal-cards article:nth-child(2) .portal-icon { background: linear-gradient(135deg, #ccfbf1, #dbeafe); color: #0f766e; }
+.portal-cards article:nth-child(3) .portal-icon { background: linear-gradient(135deg, #fef3c7, #ffedd5); color: #c2410c; }
+.portal-cards article:nth-child(4) .portal-icon { background: linear-gradient(135deg, #fce7f3, #ede9fe); color: #be185d; }
 .portal-icon {
   width: 54px; height: 54px; margin: 0 auto 15px; display: grid; place-items: center; border-radius: 17px;
   background: linear-gradient(135deg, #e0f2fe, #ede9fe); color: #2563eb; font-weight: 900;
@@ -130,6 +141,11 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
 .portal-shell aside {
   background: linear-gradient(180deg, #0b1f33, #163750); color: white; padding: 24px 16px;
   display: flex; flex-direction: column; box-shadow: 12px 0 30px rgba(15,23,42,.08);
+  position: relative; overflow: hidden;
+}
+.portal-shell aside::before {
+  content: ""; position: absolute; width: 220px; height: 220px; top: -110px; left: -100px;
+  border-radius: 50%; background: rgba(56,189,248,.12); filter: blur(2px); pointer-events: none;
 }
 .portal-brand {
   width: 64px; height: 64px; border: 1px solid rgba(255,255,255,.15); border-radius: 19px;
@@ -163,10 +179,13 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
   box-shadow: 0 10px 28px rgba(51,65,85,.055);
 }
 .student-metrics article { padding: 18px; display: grid; gap: 7px; }
+.student-metrics article { transition: transform .2s ease, box-shadow .2s ease; }
+.student-metrics article:hover { transform: translateY(-4px); box-shadow: 0 16px 34px rgba(51,65,85,.12); }
 .student-metrics small { color: #64748b; }
 .student-metrics strong { font-size: 26px; color: #1e293b; }
 .working-section { padding: 22px; margin-bottom: 16px; }
-.working-section h2 { margin: 0 0 16px; font-size: 20px; }
+.working-section h2 { margin: 0 0 16px; font-size: 20px; letter-spacing: -.02em; }
+.working-section h3 { margin: 28px 0 14px; color: #334155; }
 .working-form { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 12px; align-items: end; }
 .working-form label { display: grid; gap: 7px; color: #475569; font-size: 13px; font-weight: 800; }
 .working-form input, .working-form select, .role-auth input, .student-auth input {
@@ -178,10 +197,14 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
 }
 .working-form button { border: 0; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #4f46e5); color: white; padding: 12px 14px; cursor: pointer; font-weight: 800; }
 .working-form button:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(79,70,229,.18); }
+.working-form button:active, .portal-cards button:active, .portal-button:active { transform: translateY(0) scale(.98); }
 .data-table { width: 100%; border-collapse: collapse; overflow: hidden; }
-.data-table th { background: #f1f5f9; color: #475569; text-align: left; }
+.data-table th { background: linear-gradient(90deg, #eff6ff, #f8fafc); color: #475569; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
 .data-table th, .data-table td { border-bottom: 1px solid #e8eef5; padding: 13px; }
+.data-table tbody tr { transition: background .16s ease, transform .16s ease; }
 .data-table tbody tr:hover { background: #f8fafc; }
+.data-table td select { border: 1px solid #dbe4ef; border-radius: 8px; padding: 8px 9px; color: #334155; background: white; }
+.data-table td select:focus { border-color: #60a5fa; outline: 3px solid rgba(96,165,250,.14); }
 .progress-box strong { font-size: 34px; color: #0f766e; }
 .progress-box div { height: 11px; margin: 12px 0; border-radius: 20px; background: #e2e8f0; overflow: hidden; }
 .progress-box div span { display: block; height: 100%; border-radius: 20px; background: linear-gradient(90deg, #14b8a6, #38bdf8); }
@@ -222,6 +245,8 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
 .student-auth button.secondary, .role-auth button.secondary { background: #f1f5f9; color: #1e293b; border: 1px solid #dbe4ef; }
 .student-auth button.text-mode { background: transparent; color: #2563eb; border: 0; padding: 4px; font-size: 12px; }
 .signup-success { color: #047857; text-align: left; }
+.status-present { color: #047857; font-weight: 800; }
+.status-absent { color: #be123c; font-weight: 800; }
 
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
   outline: 3px solid rgba(96,165,250,.35); outline-offset: 3px;
@@ -230,6 +255,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: no-preference) {
   .portal-cards article, .institution-info article, .student-metrics article { animation: fade-up .45s ease both; }
   @keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes float-ring { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-18px, -14px) rotate(12deg); } }
 }
 
 @media (max-width: 900px) {
