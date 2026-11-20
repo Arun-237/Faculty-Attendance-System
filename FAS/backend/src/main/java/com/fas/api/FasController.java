@@ -187,9 +187,9 @@ public class FasController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                     "message", "Email is already registered"));
         }
-        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8,12}$")) {
+        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8}$")) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "Password must be 8–12 characters with uppercase, lowercase and a number"));
+                    "message", "Password must be exactly 8 characters with uppercase, lowercase and a number"));
         }
         if (name.isBlank() || name.length() < 2 || name.length() > 100) {
             return ResponseEntity.badRequest().body(Map.of("message", "Student name must be 2–100 characters"));
@@ -217,9 +217,9 @@ public class FasController {
         if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             return ResponseEntity.badRequest().body(Map.of("message", "Enter a valid email address"));
         }
-        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8,12}$")) {
+        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8}$")) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "Password must be 8–12 characters with uppercase, lowercase and a number"));
+                    "message", "Password must be exactly 8 characters with uppercase, lowercase and a number"));
         }
         if (!subjects.contains(subject)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Select a valid subject"));

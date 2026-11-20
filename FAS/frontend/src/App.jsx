@@ -33,7 +33,7 @@ const attendanceSuccessTitles = new Set([
 ])
 const portalSessionKey = 'fas-portal-session'
 const emailPattern = /^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
-const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8,12}$/
+const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8}$/
 const studentIdPattern = /^25CSVVIT(?:0[1-9]|[1-4][0-9]|50)$/
 
 function isValidName(name) {
@@ -271,7 +271,7 @@ function App() {
       return
     }
     if (!passwordPattern.test(facultyPassword)) {
-      setError('Password must be 8–12 characters with uppercase, lowercase and a number, for example Faculty123')
+      setError('Password must be exactly 8 characters with uppercase, lowercase and a number, for example Facul123')
       return
     }
     setLoading(true)
@@ -312,7 +312,7 @@ function App() {
       return
     }
     if (!passwordPattern.test(studentPassword)) {
-      setError('Password must be 8–12 characters with uppercase, lowercase and a number, for example Student123')
+      setError('Password must be exactly 8 characters with uppercase, lowercase and a number, for example Studn123')
       return
     }
     setLoading(true)
@@ -884,7 +884,7 @@ function App() {
                       <input type="email" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} placeholder="Email address" maxLength={255} />
                     )}
                     <input type="password" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} placeholder="8-character password" maxLength={8} />
-                    {signupMode && <small className={passwordPattern.test(studentPassword) ? 'field-hint valid' : 'field-hint'}>Password: 8–12 characters, uppercase, lowercase and number · Example: Student123</small>}
+                    {signupMode && <small className={passwordPattern.test(studentPassword) ? 'field-hint valid' : 'field-hint'}>Password: exactly 8 characters, uppercase, lowercase and number · Example: Studn123</small>}
                     {apiResult?.title === 'Signup successful' && <small className="signup-success">{apiResult.permissions}</small>}
                     <div className="auth-actions">
                       <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
@@ -904,8 +904,8 @@ function App() {
                         <input value={facultyName} onChange={(event) => setFacultyName(event.target.value)} placeholder="Faculty name" maxLength={100} />
                         <input type="email" value={facultyEmail} onChange={(event) => setFacultyEmail(event.target.value)} placeholder="Faculty email" maxLength={255} />
                         <small className="field-hint">Name example: Allen · Email example: faculty.dsa@vvit.edu</small>
-                        <input type="password" value={facultyPassword} onChange={(event) => setFacultyPassword(event.target.value)} placeholder="Password" maxLength={12} />
-                        <small className={passwordPattern.test(facultyPassword) ? 'field-hint valid' : 'field-hint'}>Password: 8–12 characters, uppercase, lowercase and number · Example: Faculty123</small>
+                        <input type="password" value={facultyPassword} onChange={(event) => setFacultyPassword(event.target.value)} placeholder="Password" maxLength={8} />
+                        <small className={passwordPattern.test(facultyPassword) ? 'field-hint valid' : 'field-hint'}>Password: exactly 8 characters, uppercase, lowercase and number · Example: Facul123</small>
                         <select value={facultySubject} onChange={(event) => setFacultySubject(event.target.value)}>
                           <option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option>
                         </select>
