@@ -135,6 +135,8 @@
 .portal-cards button:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(79,70,229,.22); }
 
 .error { color: #b91c1c; background: #fff1f2; border: 1px solid #fecdd3; padding: 12px 14px; border-radius: 11px; margin: 10px 0; }
+.success { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 12px 14px; border-radius: 11px; margin: 10px 0; display: grid; gap: 3px; }
+.success span { color: #065f46; }
 footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-between; align-items: center; background: var(--navy); color: #cbd5e1; }
 
 .portal-shell { min-height: 100vh; display: grid; grid-template-columns: 230px 1fr; background: #f3f6fb; }

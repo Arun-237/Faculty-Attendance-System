@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const accounts = {
@@ -23,6 +23,12 @@ const portals = {
     ['My Subjects', 'Subject-wise attendance summary'],
   ],
 }
+
+const attendanceSuccessTitles = new Set([
+  'Attendance updated',
+  'Students attendance submitted successfully',
+  'All students attendance marked present',
+])
 
 function App() {
   const [view, setView] = useState('home')
@@ -60,6 +66,14 @@ function App() {
   const [reportFilterClass, setReportFilterClass] = useState('')
   const [hodReportMode, setHodReportMode] = useState('Daily')
   const [reportStatus, setReportStatus] = useState({})
+  const successMessageRef = useRef(null)
+
+  useEffect(() => {
+    if (attendanceSuccessTitles.has(apiResult?.title)) {
+      successMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      successMessageRef.current?.focus({ preventScroll: true })
+    }
+  }, [apiResult])
 
   function beginRoleLogin(role) {
     setRoleLoginFor(role)
@@ -265,9 +279,10 @@ function App() {
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.message || 'Attendance update failed')
-      setApiResult({ title: 'Attendance saved', permissions: result.message })
+      setApiResult({ title: 'Students attendance submitted successfully', permissions: result.message })
       setError('')
     } catch (saveError) {
+      setApiResult(null)
       setError(saveError.message)
     }
   }
@@ -420,7 +435,17 @@ function App() {
               </tr>
             ))}
           </tbody></table>
-          <button type="button" className="text-mode" onClick={() => setAttendanceStatus(Object.fromEntries(classStudents.map((student) => [student.studentId, 'P'])))}>Select All Present</button>
+          <button
+            type="button"
+            className="text-mode"
+            onClick={() => {
+              setAttendanceStatus(Object.fromEntries(classStudents.map((student) => [student.studentId, 'P'])))
+              setApiResult({ title: 'All students attendance marked present', permissions: 'All students are marked as present. Click Save Attendance to submit.' })
+              setError('')
+            }}
+          >
+            Select All Present
+          </button>
           <button type="button" onClick={saveDailyAttendance}>Save Attendance</button>
           <h3>Attendance Report</h3>
           <div className="working-form attendance-editor">
@@ -506,6 +531,12 @@ function App() {
             </section>
           )}
           {error && <div className="error">{error}</div>}
+          {attendanceSuccessTitles.has(apiResult?.title) && (
+            <div ref={successMessageRef} className="success" role="status" aria-live="polite" tabIndex="-1">
+              <strong>{apiResult.title}</strong>
+              {apiResult.permissions && <span>{apiResult.permissions}</span>}
+            </div>
+          )}
           {renderActiveSection()}
         </main>
       </div>
