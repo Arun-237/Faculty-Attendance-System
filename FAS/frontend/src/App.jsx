@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import heroImage from './assets/campus-hero.png'
+import { emailPattern } from './signupValidation.js'
 import './App.css'
 
-const accounts = {
-  Administrator: { username: 'Admin', password: 'ADMINVVIT' },
-  HOD: { username: 'HOD', password: 'HODVVIT' },
-}
-
+const apiBaseUrl = 'http://localhost:8080'
 const publicRoles = ['Administrator', 'HOD', 'Faculty', 'Student']
 
 const portals = {
@@ -29,12 +26,38 @@ const portals = {
 const attendanceSuccessTitles = new Set([
   'Attendance updated',
   'Students attendance submitted successfully',
-  'All students attendance marked present',
 ])
 const portalSessionKey = 'fas-portal-session'
-const emailPattern = /^[A-Za-z0-9+_.-]+@gmail\.com$/i
 const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8}$/
 const studentIdPattern = /^25CSVVIT(?:0[1-9]|[1-4][0-9]|50)$/
+
+function getLocalDateValue() {
+  const date = new Date()
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return localDate.toISOString().slice(0, 10)
+}
+
+async function fetchJson(url, options, fallbackMessage) {
+  const response = await fetch(url, options)
+  if (!response.ok) {
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      const result = await response.json()
+      throw new Error(result.message || `${fallbackMessage} (HTTP ${response.status})`)
+    }
+    throw new Error(`${fallbackMessage} (HTTP ${response.status})`)
+  }
+  return response.json()
+}
+
+function getErrorMessage(requestError, fallbackMessage) {
+  return requestError instanceof Error && requestError.message
+    ? requestError.message
+    : fallbackMessage
+}
+
+function hasPortalRole(sessionDetails, role) {
+  return sessionDetails.roles?.includes(`ROLE_${role.toUpperCase()}`) || false
+}
 
 function isValidName(name) {
   return typeof name === 'string' && name.trim().length >= 2 && name.trim().length <= 100
@@ -62,6 +85,9 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [apiResult, setApiResult] = useState(null)
   const [attendance, setAttendance] = useState(null)
+  const [studentAttendanceLoading, setStudentAttendanceLoading] = useState(false)
+  const [savingAttendance, setSavingAttendance] = useState(false)
+  const [attendanceNotice, setAttendanceNotice] = useState('')
   const [studentId, setStudentId] = useState('')
   const [studentName, setStudentName] = useState('')
   const [studentEmail, setStudentEmail] = useState('')
@@ -78,15 +104,16 @@ function App() {
   const [selectedSubject, setSelectedSubject] = useState('DSA')
   const [conductedSessions, setConductedSessions] = useState(50)
   const [attendedSessions, setAttendedSessions] = useState(30)
-  const [roleLoginFor, setRoleLoginFor] = useState(null)
   const [roleLoginId, setRoleLoginId] = useState('')
   const [roleLoginPassword, setRoleLoginPassword] = useState('')
   const [selectedClass, setSelectedClass] = useState('Class-A')
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10))
+  const [attendanceDate, setAttendanceDate] = useState(getLocalDateValue)
   const [dailySubject, setDailySubject] = useState('DSA')
   const [classStudents, setClassStudents] = useState([])
+  const [classStudentsLoading, setClassStudentsLoading] = useState(false)
   const [attendanceStatus, setAttendanceStatus] = useState({})
   const [attendanceReport, setAttendanceReport] = useState([])
+  const [reportLoading, setReportLoading] = useState(false)
   const [studentFilterDate, setStudentFilterDate] = useState('')
   const [studentFilterSubject, setStudentFilterSubject] = useState('')
   const [reportFilterDate, setReportFilterDate] = useState('')
@@ -97,6 +124,10 @@ function App() {
   const [activeAuthPortal, setActiveAuthPortal] = useState(null)
   const successMessageRef = useRef(null)
   const errorMessageRef = useRef(null)
+  const classStudentsRequest = useRef(0)
+  const attendanceReportRequest = useRef(0)
+  const studentAttendanceRequest = useRef(0)
+  const attendanceListRequest = useRef(0)
 
   useEffect(() => {
     restorePortalSession()
@@ -127,7 +158,6 @@ function App() {
     setFacultyName('')
     setFacultyEmail('')
     setFacultyPassword('')
-    setRoleLoginFor(role)
     setRoleLoginId('')
     setRoleLoginPassword('')
     setError('')
@@ -135,7 +165,6 @@ function App() {
 
   function beginStudentPortal() {
     setActiveAuthPortal('Student')
-    setRoleLoginFor(null)
     setSignupMode(false)
     setFacultySignupMode(false)
     setFacultyName('')
@@ -145,7 +174,6 @@ function App() {
 
   function beginFacultyPortal() {
     setActiveAuthPortal('Faculty')
-    setRoleLoginFor(null)
     setFacultySignupMode(false)
     setSignupMode(false)
     setStudentId('')
@@ -161,22 +189,16 @@ function App() {
     if (role === 'Faculty') {
       return loginFaculty()
     }
-    const enteredId = roleLoginId.trim()
-    const enteredPassword = roleLoginPassword
-    const expected = accounts[role]
-    if (enteredId !== expected.username || enteredPassword !== expected.password) {
-      setError('Invalid user mail/id or password')
-      return
-    }
     setLoading(true)
     setError('')
     try {
-      const credentials = btoa(`${enteredId}:${enteredPassword}`)
-      const response = await fetch('http://localhost:8080/api/me', {
+      const credentials = btoa(`${roleLoginId.trim()}:${roleLoginPassword}`)
+      const sessionDetails = await fetchJson(`${apiBaseUrl}/api/me`, {
         headers: { Authorization: `Basic ${credentials}` },
-      })
-      if (!response.ok) throw new Error('Invalid user mail/id or password')
-      const sessionDetails = await response.json()
+      }, 'Invalid user mail/id or password')
+      if (!hasPortalRole(sessionDetails, role)) {
+        throw new Error(`This account does not have ${role} portal access`)
+      }
       setSession(sessionDetails)
       setActiveRole(role)
       setActiveSection(portals[role][0][0])
@@ -190,7 +212,7 @@ function App() {
       if (role !== 'Student') {
         if (role === 'HOD') await loadHodReport(credentials)
         if (role === 'Administrator') {
-          await loadClassStudents(selectedClass, credentials)
+          await loadClassStudents(selectedClass, credentials, 'Administrator')
         }
       }
       setView('portal')
@@ -206,11 +228,12 @@ function App() {
     setError('')
     try {
       const credentials = btoa(`${studentEmail.trim().toLowerCase()}:${studentPassword}`)
-      const response = await fetch('http://localhost:8080/api/me', {
+      const sessionDetails = await fetchJson(`${apiBaseUrl}/api/me`, {
         headers: { Authorization: `Basic ${credentials}` },
-      })
-      if (!response.ok) throw new Error('Invalid user mail/id or password')
-      const sessionDetails = await response.json()
+      }, 'Invalid user mail/id or password')
+      if (!hasPortalRole(sessionDetails, 'Student')) {
+        throw new Error('This account does not have Student portal access')
+      }
       setSession(sessionDetails)
       setActiveRole('Student')
       setActiveSection(portals.Student[0][0])
@@ -235,11 +258,12 @@ function App() {
     setError('')
     try {
       const credentials = btoa(`${facultyEmail.trim().toLowerCase()}:${facultyPassword}`)
-      const response = await fetch('http://localhost:8080/api/me', {
+      const sessionDetails = await fetchJson(`${apiBaseUrl}/api/me`, {
         headers: { Authorization: `Basic ${credentials}` },
-      })
-      if (!response.ok) throw new Error('Invalid user mail/id or password')
-      const sessionDetails = await response.json()
+      }, 'Invalid user mail/id or password')
+      if (!hasPortalRole(sessionDetails, 'Faculty')) {
+        throw new Error('This account does not have Faculty portal access')
+      }
       setSession(sessionDetails)
       setActiveRole('Faculty')
       setActiveSection(portals.Faculty[0][0])
@@ -277,7 +301,7 @@ function App() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch('http://localhost:8080/api/public/faculty/signup', {
+      const response = await fetch(`${apiBaseUrl}/api/public/faculty/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -318,7 +342,7 @@ function App() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch('http://localhost:8080/api/public/student/signup', {
+      const response = await fetch(`${apiBaseUrl}/api/public/student/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentId, password: studentPassword, name: studentName, email: studentEmail }),
@@ -335,17 +359,29 @@ function App() {
   }
 
   function logout() {
+    classStudentsRequest.current += 1
+    attendanceReportRequest.current += 1
+    studentAttendanceRequest.current += 1
+    attendanceListRequest.current += 1
     sessionStorage.removeItem(portalSessionKey)
     setActiveAuthPortal(null)
     setSignupMode(false)
     setFacultySignupMode(false)
-    setRoleLoginFor(null)
     setSession(null)
     setActiveRole(null)
     setActiveSection(null)
     setApiResult(null)
     setView('home')
     setAttendance(null)
+    setClassStudents([])
+    setAttendanceReport([])
+    setAttendanceList([])
+    setClassStudentsLoading(false)
+    setReportLoading(false)
+    setStudentAttendanceLoading(false)
+    setSavingAttendance(false)
+    setAttendanceNotice('')
+    setError('')
     setPortalCredentials(null)
     setStudentId('')
     setStudentName('')
@@ -366,12 +402,15 @@ function App() {
       if (!saved.activeRole || !saved.credentials || !portals[saved.activeRole]) {
         throw new Error('Invalid saved portal session')
       }
-      const response = await fetch('http://localhost:8080/api/me', {
+      const response = await fetch(`${apiBaseUrl}/api/me`, {
         headers: { Authorization: `Basic ${saved.credentials}` },
       })
       if (!response.ok) throw new Error('Portal session expired')
 
       const sessionDetails = await response.json()
+      if (!hasPortalRole(sessionDetails, saved.activeRole)) {
+        throw new Error('Saved account does not have access to this portal')
+      }
       setSession(sessionDetails)
       setActiveRole(saved.activeRole)
       setActiveSection(saved.activeSection || portals[saved.activeRole][0][0])
@@ -406,30 +445,76 @@ function App() {
   }
 
   async function loadStudentAttendance(credentials, filterDate = studentFilterDate, filterSubject = studentFilterSubject) {
+    if (!credentials) return
+    const requestId = ++studentAttendanceRequest.current
     const params = new URLSearchParams()
     if (filterDate) params.set('date', filterDate)
     if (filterSubject) params.set('subject', filterSubject)
-    const response = await fetch(`http://localhost:8080/api/student/attendance${params.size ? `?${params}` : ''}`, {
-      headers: { Authorization: `Basic ${credentials}` },
-    })
-    if (response.ok) setAttendance(await response.json())
+    setStudentAttendanceLoading(true)
+    setError('')
+    try {
+      const result = await fetchJson(`${apiBaseUrl}/api/student/attendance${params.size ? `?${params}` : ''}`, {
+        headers: { Authorization: `Basic ${credentials}` },
+      }, 'Unable to load student attendance')
+      if (!Array.isArray(result.subjects) || !Array.isArray(result.subjectSummaries)) {
+        throw new Error('Student attendance response is incomplete')
+      }
+      if (requestId === studentAttendanceRequest.current) setAttendance(result)
+    } catch (requestError) {
+      if (requestId === studentAttendanceRequest.current) {
+        setAttendance(null)
+        setError(getErrorMessage(requestError, 'Unable to load student attendance'))
+      }
+    } finally {
+      if (requestId === studentAttendanceRequest.current) setStudentAttendanceLoading(false)
+    }
   }
 
   async function loadClassStudents(className, credentials = portalCredentials, roleOverride = activeRole) {
     if (!credentials) return
-    const role = roleOverride === 'Administrator' ? 'administrator' : 'faculty'
-    const response = await fetch(`http://localhost:8080/api/${role}/students?section=${encodeURIComponent(className)}`, {
-      headers: { Authorization: `Basic ${credentials}` },
-    })
-    if (response.ok) {
-      const students = await response.json()
-      setClassStudents(students)
-      setAttendanceStatus(Object.fromEntries(students.map((student) => [student.studentId, 'P'])))
+    const requestId = ++classStudentsRequest.current
+    const role = roleOverride === 'Administrator'
+      ? 'administrator'
+      : roleOverride === 'Faculty'
+        ? 'faculty'
+        : null
+    if (!role) {
+      setClassStudents([])
+      setAttendanceStatus({})
+      setClassStudentsLoading(false)
+      setError('Select a valid portal before loading students')
+      return
+    }
+    setClassStudentsLoading(true)
+    setClassStudents([])
+    setAttendanceStatus({})
+    setAttendanceNotice('')
+    setError('')
+    try {
+      const students = await fetchJson(
+        `${apiBaseUrl}/api/${role}/students?section=${encodeURIComponent(className)}`,
+        { headers: { Authorization: `Basic ${credentials}` } },
+        'Unable to load students'
+      )
+      if (!Array.isArray(students)) throw new Error('Student list response is invalid')
+      if (requestId === classStudentsRequest.current) {
+        setClassStudents(students)
+        setAttendanceStatus(Object.fromEntries(students.map((student) => [student.studentId, 'P'])))
+      }
+    } catch (requestError) {
+      if (requestId === classStudentsRequest.current) {
+        setClassStudents([])
+        setAttendanceStatus({})
+        setError(getErrorMessage(requestError, 'Unable to load students'))
+      }
+    } finally {
+      if (requestId === classStudentsRequest.current) setClassStudentsLoading(false)
     }
   }
 
   async function loadHodReport(credentials = portalCredentials, date = reportFilterDate, subject = reportFilterSubject, section = reportFilterClass, mode = hodReportMode) {
     if (!credentials) return
+    const requestId = ++attendanceReportRequest.current
     const params = new URLSearchParams()
     if (date && mode === 'Daily') params.set('date', date)
     if (subject) params.set('subject', subject)
@@ -437,29 +522,60 @@ function App() {
     const endpoint = mode === 'Overall'
       ? '/api/hod/attendance/overall'
       : '/api/hod/attendance/report'
-    const response = await fetch(`http://localhost:8080${endpoint}${params.size ? `?${params}` : ''}`, {
-      headers: { Authorization: `Basic ${credentials}` },
-    })
-    if (response.ok) setAttendanceReport(await response.json())
+    setReportLoading(true)
+    setAttendanceReport([])
+    setError('')
+    try {
+      const report = await fetchJson(`${apiBaseUrl}${endpoint}${params.size ? `?${params}` : ''}`, {
+        headers: { Authorization: `Basic ${credentials}` },
+      }, 'Unable to load attendance report')
+      if (!Array.isArray(report)) throw new Error('Attendance report response is invalid')
+      if (requestId === attendanceReportRequest.current) setAttendanceReport(report)
+    } catch (requestError) {
+      if (requestId === attendanceReportRequest.current) {
+        setAttendanceReport([])
+        setError(getErrorMessage(requestError, 'Unable to load attendance report'))
+      }
+    } finally {
+      if (requestId === attendanceReportRequest.current) setReportLoading(false)
+    }
   }
 
   async function loadPortalReport(credentials = portalCredentials, date = reportFilterDate, subject = reportFilterSubject, section = reportFilterClass, roleOverride = activeRole) {
     if (!credentials) return
+    const requestId = ++attendanceReportRequest.current
     const params = new URLSearchParams()
     if (date) params.set('date', date)
     if (subject) params.set('subject', subject)
     if (section) params.set('section', section)
     const role = roleOverride === 'Administrator' ? 'administrator' : 'faculty'
-    const response = await fetch(`http://localhost:8080/api/${role}/attendance/report${params.size ? `?${params}` : ''}`, {
-      headers: { Authorization: `Basic ${credentials}` },
-    })
-    if (response.ok) setAttendanceReport(await response.json())
+    setReportLoading(true)
+    setAttendanceReport([])
+    setError('')
+    try {
+      const report = await fetchJson(`${apiBaseUrl}/api/${role}/attendance/report${params.size ? `?${params}` : ''}`, {
+        headers: { Authorization: `Basic ${credentials}` },
+      }, 'Unable to load attendance report')
+      if (!Array.isArray(report)) throw new Error('Attendance report response is invalid')
+      if (requestId === attendanceReportRequest.current) setAttendanceReport(report)
+    } catch (requestError) {
+      if (requestId === attendanceReportRequest.current) {
+        setAttendanceReport([])
+        setError(getErrorMessage(requestError, 'Unable to load attendance report'))
+      }
+    } finally {
+      if (requestId === attendanceReportRequest.current) setReportLoading(false)
+    }
   }
 
   async function saveReportRecord(record) {
+    if (savingAttendance) return
     const status = reportStatus[`${record.studentId}-${record.date}-${record.subject}`] || record.status
+    setSavingAttendance(true)
+    setApiResult(null)
+    setError('')
     try {
-      const response = await fetch('http://localhost:8080/api/administrator/students/attendance/daily', {
+      const result = await fetchJson(`${apiBaseUrl}/api/administrator/students/attendance/daily`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -471,16 +587,18 @@ function App() {
           records: [{ studentId: record.studentId, status }],
         }),
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Attendance update failed')
       setApiResult({ title: 'Attendance updated', permissions: result.message })
+      setAttendanceNotice('')
       await loadPortalReport(portalCredentials)
     } catch (saveError) {
       setError(saveError.message)
+    } finally {
+      setSavingAttendance(false)
     }
   }
 
   async function saveDailyAttendance() {
+    if (savingAttendance) return
     if (!attendanceDate) {
       setError('Select an attendance date')
       return
@@ -491,8 +609,11 @@ function App() {
     }
     const role = activeRole === 'Administrator' ? 'administrator' : 'faculty'
     const subject = activeRole === 'Faculty' ? (session?.subject || dailySubject) : dailySubject
+    setSavingAttendance(true)
+    setApiResult(null)
+    setError('')
     try {
-      const response = await fetch(`http://localhost:8080/api/${role}/students/attendance/daily`, {
+      const result = await fetchJson(`${apiBaseUrl}/api/${role}/students/attendance/daily`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -507,17 +628,19 @@ function App() {
           })),
         }),
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Attendance update failed')
       setApiResult({ title: 'Students attendance submitted successfully', permissions: result.message })
+      setAttendanceNotice('')
       setError('')
     } catch (saveError) {
       setApiResult(null)
       setError(saveError.message)
+    } finally {
+      setSavingAttendance(false)
     }
   }
 
   async function saveStudentAttendance() {
+    if (savingAttendance) return
     if (!selectedStudent) {
       setError('Select a student')
       return
@@ -535,8 +658,15 @@ function App() {
       HOD: '/api/hod/students/attendance',
       Administrator: '/api/administrator/students/attendance',
     }
+    if (!endpointByRole[activeRole]) {
+      setError('Select a valid portal before updating attendance')
+      return
+    }
+    setSavingAttendance(true)
+    setApiResult(null)
+    setError('')
     try {
-      const response = await fetch(`http://localhost:8080${endpointByRole[activeRole]}`, {
+      const result = await fetchJson(`${apiBaseUrl}${endpointByRole[activeRole]}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -549,12 +679,12 @@ function App() {
           attendedSessions,
         }),
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.message || 'Attendance update failed')
       setApiResult({ title: 'Attendance updated', permissions: result.message })
       await loadAttendanceList(portalCredentials, activeRole)
     } catch (saveError) {
       setError(saveError.message)
+    } finally {
+      setSavingAttendance(false)
     }
   }
 
@@ -565,12 +695,18 @@ function App() {
       Administrator: '/api/administrator/students/attendance',
     }
     const role = roleOverride || activeRole
-    const response = await fetch(`http://localhost:8080${endpointByRole[role]}`, {
-      headers: { Authorization: `Basic ${credentials}` },
-    })
-    if (response.ok) {
-      const rows = await response.json()
-      setAttendanceList(rows)
+    const requestId = ++attendanceListRequest.current
+    try {
+      const rows = await fetchJson(`${apiBaseUrl}${endpointByRole[role]}`, {
+        headers: { Authorization: `Basic ${credentials}` },
+      }, 'Unable to load attendance list')
+      if (!Array.isArray(rows)) throw new Error('Attendance list response is invalid')
+      if (requestId === attendanceListRequest.current) setAttendanceList(rows)
+    } catch (requestError) {
+      if (requestId === attendanceListRequest.current) {
+        setAttendanceList([])
+        setError(getErrorMessage(requestError, 'Unable to load attendance list'))
+      }
     }
   }
 
@@ -619,12 +755,9 @@ function App() {
       Student: '/api/student/dashboard',
     }
     try {
-      let credentials = portalCredentials
-      if (!credentials && activeRole !== 'Student') {
-        const account = accounts[activeRole]
-        credentials = btoa(`${account.username}:${account.password}`)
-      }
-      const response = await fetch(`http://localhost:8080${endpoints[activeRole]}`, {
+      const credentials = portalCredentials
+      if (!credentials) throw new Error('Your session has expired. Please sign in again.')
+      const response = await fetch(`${apiBaseUrl}${endpoints[activeRole]}`, {
         headers: { Authorization: `Basic ${credentials}` },
       })
       if (!response.ok) throw new Error(`Access denied for ${activeRole}`)
@@ -663,9 +796,11 @@ function App() {
             <button type="button" className="text-mode" onClick={() => { setStudentFilterDate(''); setStudentFilterSubject(''); loadStudentAttendance(portalCredentials, '', '') }}>Clear Filters</button>
           </div>
           <table className="data-table"><thead><tr><th>Date</th><th>Subject</th><th>Status</th></tr></thead><tbody>
-            {(attendance?.subjects || []).map((record) => (
+            {studentAttendanceLoading ? (
+              <tr><td colSpan={3}>Loading attendance...</td></tr>
+            ) : attendance?.subjects?.length ? attendance.subjects.map((record) => (
               <tr key={`${record.date}-${record.subject}`}><td>{record.date}</td><td>{record.subject}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
-            ))}
+            )) : <tr><td colSpan={3}>No attendance records match the selected filters.</td></tr>}
           </tbody></table>
           <h3>Overall by Subject</h3>
           <table className="data-table"><thead><tr><th>Subject</th><th>Conducted</th><th>Present</th><th>Overall</th></tr></thead><tbody>
@@ -692,25 +827,31 @@ function App() {
                   : <label>Subject<select value={dailySubject} onChange={(event) => setDailySubject(event.target.value)}><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>}
               </div>
               <table className="data-table"><thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th>Attendance</th></tr></thead><tbody>
-                {classStudents.map((student) => (
+                {classStudentsLoading ? (
+                  <tr><td colSpan={4}>Loading students...</td></tr>
+                ) : classStudents.length ? classStudents.map((student) => (
                   <tr key={student.studentId}>
                     <td>{student.studentId}</td><td>{student.name || '-'}</td><td>{student.section}</td>
-                    <td><select value={attendanceStatus[student.studentId] || 'P'} onChange={(event) => setAttendanceStatus((current) => ({ ...current, [student.studentId]: event.target.value }))}><option value="P">P - Present</option><option value="AB">AB - Absent</option></select></td>
+                    <td><select value={attendanceStatus[student.studentId] || 'P'} onChange={(event) => { setAttendanceNotice(''); setAttendanceStatus((current) => ({ ...current, [student.studentId]: event.target.value })) }}><option value="P">P - Present</option><option value="AB">AB - Absent</option></select></td>
                   </tr>
-                ))}
+                )) : <tr><td colSpan={4}>No students found in {selectedClass}.</td></tr>}
               </tbody></table>
               <button
                 type="button"
                 className="text-mode"
                 onClick={() => {
                   setAttendanceStatus(Object.fromEntries(classStudents.map((student) => [student.studentId, 'P'])))
-                  setApiResult({ title: 'All students attendance marked present', permissions: 'All students are marked as present. Click Save Attendance to submit.' })
+                  setAttendanceNotice('All students are selected as present. Click Save Attendance to submit.')
+                  setApiResult(null)
                   setError('')
                 }}
               >
                 Select All Present
               </button>
-              <button type="button" onClick={saveDailyAttendance}>Save Attendance</button>
+              {attendanceNotice && <p className="info-note" role="status">{attendanceNotice}</p>}
+              <button type="button" disabled={savingAttendance || classStudentsLoading || !classStudents.length} onClick={saveDailyAttendance}>
+                {savingAttendance ? 'Saving...' : 'Save Attendance'}
+              </button>
             </>
           )}
           {activeSection === 'Attendance Report' && (
@@ -743,17 +884,19 @@ function App() {
                 }}>Clear Filters</button>
               </div>
               <table className="data-table"><thead><tr><th>Date</th><th>Student ID</th><th>Name</th><th>Class</th><th>Subject</th><th>Status</th>{activeRole === 'Administrator' && <th>Update</th>}</tr></thead><tbody>
-                {attendanceReport.map((record) => {
+                {reportLoading ? (
+                  <tr><td colSpan={activeRole === 'Administrator' ? 7 : 6}>Loading attendance report...</td></tr>
+                ) : attendanceReport.length ? attendanceReport.map((record, index) => {
                   const key = `${record.studentId}-${record.date}-${record.subject}`
                   return (
-                    <tr key={key}><td>{record.date}</td><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.subject}</td>
+                    <tr key={`${key}-${index}`}><td>{record.date}</td><td>{record.studentId || '-'}</td><td>{record.name || '-'}</td><td>{record.section || '-'}</td><td>{record.subject || '-'}</td>
                       <td>{activeRole === 'Administrator' ? (
                         <select value={reportStatus[key] || record.status} onChange={(event) => setReportStatus((current) => ({ ...current, [key]: event.target.value }))}><option value="P">P - Present</option><option value="AB">AB - Absent</option></select>
                       ) : (record.status === 'P' ? 'Present' : 'Absent')}</td>
-                      {activeRole === 'Administrator' && <td><button type="button" onClick={() => saveReportRecord(record)}>Save</button></td>}
+                      {activeRole === 'Administrator' && <td><button type="button" disabled={savingAttendance} onClick={() => saveReportRecord(record)}>{savingAttendance ? 'Saving...' : 'Save'}</button></td>}
                     </tr>
                   )
-                })}
+                }) : <tr><td colSpan={activeRole === 'Administrator' ? 7 : 6}>No attendance records match the selected filters.</td></tr>}
               </tbody></table>
             </>
           )}
@@ -775,15 +918,19 @@ function App() {
           </div>
           {hodReportMode === 'Daily' ? (
             <table className="data-table"><thead><tr><th>Date</th><th>Student ID</th><th>Name</th><th>Section</th><th>Subject</th><th>Status</th></tr></thead><tbody>
-              {attendanceReport.map((record) => (
-                <tr key={`${record.studentId}-${record.date}-${record.subject}`}><td>{record.date}</td><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.subject}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
-              ))}
+              {reportLoading ? (
+                <tr><td colSpan={6}>Loading attendance report...</td></tr>
+              ) : attendanceReport.length ? attendanceReport.map((record, index) => (
+                <tr key={`${record.studentId}-${record.date}-${record.subject}-${index}`}><td>{record.date}</td><td>{record.studentId || '-'}</td><td>{record.name || '-'}</td><td>{record.section || '-'}</td><td>{record.subject || '-'}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
+              )) : <tr><td colSpan={6}>No attendance records match the selected filters.</td></tr>}
             </tbody></table>
           ) : (
             <table className="data-table"><thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th>Conducted</th><th>Present</th><th>Absent</th><th>Overall</th></tr></thead><tbody>
-              {attendanceReport.map((record) => (
-                <tr key={record.studentId}><td>{record.studentId}</td><td>{record.name || '-'}</td><td>{record.section}</td><td>{record.conducted}</td><td>{record.attended}</td><td>{record.absent}</td><td>{record.overall}%</td></tr>
-              ))}
+              {reportLoading ? (
+                <tr><td colSpan={7}>Loading overall attendance...</td></tr>
+              ) : attendanceReport.length ? attendanceReport.map((record, index) => (
+                <tr key={`${record.studentId || 'student'}-${index}`}><td>{record.studentId || '-'}</td><td>{record.name || '-'}</td><td>{record.section || '-'}</td><td>{record.conducted ?? 0}</td><td>{record.attended ?? 0}</td><td>{record.absent ?? 0}</td><td>{record.overall ?? 0}%</td></tr>
+              )) : <tr><td colSpan={7}>No student attendance data is available for these filters.</td></tr>}
             </tbody></table>
           )}
         </section>
@@ -890,10 +1037,10 @@ function App() {
                       <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
                       <button disabled={loading} className="secondary" onClick={() => signupMode ? signupStudent() : setSignupMode(true)}>{signupMode ? 'Confirm Signup' : 'Signup'}</button>
                     </div>
-                    {!signupMode && <button className="text-mode" onClick={() => setSignupMode(true)}>New student? Create individual account</button>}
+                    {!signupMode && <button disabled={loading} className="text-mode" onClick={() => setSignupMode(true)}>New student? Create individual account</button>}
                   </div>
                 ) : (
-                  <button type="button" onClick={beginStudentPortal}>Sign in as Student</button>
+                  <button type="button" disabled={loading} onClick={beginStudentPortal}>Sign in as Student</button>
                 )
               )}
               {role === 'Faculty' && (
@@ -923,10 +1070,10 @@ function App() {
                         {facultySignupMode ? 'Confirm Signup' : 'Signup'}
                       </button>
                     </div>
-                    {facultySignupMode && <button className="text-mode" onClick={() => setFacultySignupMode(false)}>Cancel faculty signup</button>}
+                    {facultySignupMode && <button disabled={loading} className="text-mode" onClick={() => setFacultySignupMode(false)}>Cancel faculty signup</button>}
                   </div>
                 ) : (
-                  <button type="button" onClick={beginFacultyPortal}>Sign in as Faculty</button>
+                  <button type="button" disabled={loading} onClick={beginFacultyPortal}>Sign in as Faculty</button>
                 )
               )}
               {(role === 'Administrator' || role === 'HOD') && (
@@ -936,7 +1083,7 @@ function App() {
                     <input type="password" value={roleLoginPassword} onChange={(event) => setRoleLoginPassword(event.target.value)} placeholder="Password" />
                     <div className="auth-actions">
                       <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
-                      <button className="secondary" onClick={() => { setActiveAuthPortal(null); setRoleLoginFor(null); setRoleLoginId(''); setRoleLoginPassword(''); setError('') }}>Cancel</button>
+                      <button disabled={loading} className="secondary" onClick={() => { setActiveAuthPortal(null); setRoleLoginId(''); setRoleLoginPassword(''); setError('') }}>Cancel</button>
                     </div>
                   </div>
                 ) : (

@@ -5,7 +5,8 @@ import jakarta.persistence.*;
 @Entity
 @Table(
     name = "daily_attendance",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"student_username", "attendance_date", "subject_name"})
+    uniqueConstraints = @UniqueConstraint(columnNames = {"student_username", "attendance_date", "subject_name"}),
+    indexes = @Index(name = "idx_daily_attendance_date_subject", columnList = "attendance_date,subject_name")
 )
 public class DailyAttendance {
     @Id

@@ -30,6 +30,7 @@ build/
 !**/src/test/**/build/
 fas-db.mv.db
 fas-db.trace.db
+src/main/resources/application-local.properties
 
 ### VS Code ###
 .vscode/

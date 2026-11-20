@@ -7,5 +7,6 @@ import java.util.List;
 
 public interface StudentAttendanceRepository extends JpaRepository<StudentAttendance, Long> {
     List<StudentAttendance> findByStudentUsername(String studentUsername);
+    List<StudentAttendance> findBySubjectName(String subjectName);
     java.util.Optional<StudentAttendance> findByStudentUsernameAndSubjectName(String studentUsername, String subjectName);
 }

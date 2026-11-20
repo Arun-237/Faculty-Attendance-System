@@ -12,21 +12,29 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.stream.Collectors;
 import com.fas.repository.StudentAttendanceRepository;
 import com.fas.repository.StudentRepository;
 import com.fas.repository.DailyAttendanceRepository;
 import com.fas.repository.FacultyRepository;
 import com.fas.entity.StudentAccount;
+import com.fas.entity.StudentAttendance;
 import com.fas.entity.DailyAttendance;
 import com.fas.entity.FacultyAccount;
 
 @RestController
 public class FasController {
+    private static final List<String> SUBJECTS = List.of("DSA", "DBMS", "OS", "Python", "GenAI");
+
     private final StudentAttendanceRepository studentAttendanceRepository;
     private final StudentRepository studentRepository;
     private final DailyAttendanceRepository dailyAttendanceRepository;
@@ -120,10 +128,14 @@ public class FasController {
     public Map<String, Object> studentAttendance(Authentication authentication,
                                                   @RequestParam(required = false) String date,
                                                   @RequestParam(required = false) String subject) {
-        var records = dailyAttendanceRepository.findByStudentUsernameOrderByAttendanceDateDesc(authentication.getName()).stream()
+        var allRecords = dailyAttendanceRepository
+                .findByStudentUsernameOrderByAttendanceDateDesc(authentication.getName());
+        var records = allRecords.stream()
                 .filter(record -> date == null || date.isBlank() || date.equals(record.getAttendanceDate()))
                 .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
                 .toList();
+        var recordsBySubject = records.stream()
+                .collect(Collectors.groupingBy(DailyAttendance::getSubjectName));
         int conducted = records.size();
         int attended = (int) records.stream().filter(r -> "P".equals(r.getStatus())).count();
         double overall = conducted == 0 ? 0 : attended * 100.0 / conducted;
@@ -135,10 +147,7 @@ public class FasController {
         )).toList();
         var subjectSummaries = List.of("DSA", "DBMS", "OS", "Python", "GenAI").stream()
                 .map(subjectName -> {
-                    var subjectRecords = dailyAttendanceRepository
-                            .findByStudentUsernameOrderByAttendanceDateDesc(authentication.getName()).stream()
-                            .filter(record -> subjectName.equals(record.getSubjectName()))
-                            .toList();
+                    var subjectRecords = recordsBySubject.getOrDefault(subjectName, List.of());
                     int subjectConducted = subjectRecords.size();
                     int subjectAttended = (int) subjectRecords.stream()
                             .filter(record -> "P".equals(record.getStatus()))
@@ -167,6 +176,9 @@ public class FasController {
 
     @PostMapping("/api/public/student/signup")
     public ResponseEntity<Map<String, String>> signupStudent(@RequestBody StudentSignupRequest request) {
+        if (request == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Student signup details are required"));
+        }
         String studentId = request.studentId() == null ? "" : request.studentId().trim();
         String password = request.password() == null ? "" : request.password();
         String name = request.name() == null ? "" : request.name().trim();
@@ -176,16 +188,16 @@ public class FasController {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "Student ID must be between 25CSVVIT01 and 25CSVVIT50"));
         }
-        if (!email.matches("^[A-Za-z0-9+_.-]+@gmail\\.com$")) {
+        if (!email.matches("^[A-Za-z0-9]+(?:\\.[A-Za-z0-9]+)*(?:\\+[A-Za-z0-9]+(?:\\.[A-Za-z0-9]+)*)?@gmail\\.com$")) {
             return ResponseEntity.badRequest().body(Map.of("message", "Email must be a Gmail address, for example name@gmail.com"));
         }
         if (studentRepository.findByUsername(studentId).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                    "message", "Student is already redistered"));
+                    "message", "Student ID " + studentId + " is already registered"));
         }
         if (studentRepository.findByEmail(email).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                    "message", "Email is already registered"));
+                    "message", "Email " + email + " is already registered"));
         }
         if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8}$")) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -205,23 +217,24 @@ public class FasController {
 
     @PostMapping("/api/public/faculty/signup")
     public ResponseEntity<Map<String, String>> signupFaculty(@RequestBody FacultySignupRequest request) {
+        if (request == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Faculty signup details are required"));
+        }
         String name = request.name() == null ? "" : request.name().trim();
         String email = request.email() == null ? "" : request.email().trim().toLowerCase();
         String password = request.password() == null ? "" : request.password();
         String subject = request.subject() == null ? "" : request.subject().trim();
-        List<String> subjects = List.of("DSA", "DBMS", "OS", "Python", "GenAI");
-
         if (name.isBlank() || name.length() < 2 || name.length() > 100) {
             return ResponseEntity.badRequest().body(Map.of("message", "Faculty name must be 2–100 characters"));
         }
-        if (!email.matches("^[A-Za-z0-9+_.-]+@gmail\\.com$")) {
+        if (!email.matches("^[A-Za-z0-9]+(?:\\.[A-Za-z0-9]+)*(?:\\+[A-Za-z0-9]+(?:\\.[A-Za-z0-9]+)*)?@gmail\\.com$")) {
             return ResponseEntity.badRequest().body(Map.of("message", "Email must be a Gmail address, for example name@gmail.com"));
         }
         if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8}$")) {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "Password must be exactly 8 characters with uppercase, lowercase and a number"));
         }
-        if (!subjects.contains(subject)) {
+        if (!SUBJECTS.contains(subject)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Select a valid subject"));
         }
         if (facultyRepository.findByEmail(email).isPresent()) {
@@ -248,11 +261,12 @@ public class FasController {
     public record BulkAttendanceRequest(String date, String subject, List<AttendanceStatusRequest> records) {}
 
     @PutMapping("/api/faculty/students/attendance/daily")
+    @Transactional
     public Map<String, String> facultyDailyAttendance(Authentication authentication,
                                                        @RequestBody BulkAttendanceRequest request) {
         var faculty = findFaculty(authentication).orElseThrow(() ->
                 new IllegalArgumentException("Faculty account not found"));
-        if (request == null || request.subject() == null
+        if (request == null || faculty.getSubject() == null
                 || !faculty.getSubject().equals(request.subject())) {
             throw new IllegalArgumentException("You can submit attendance only for " + faculty.getSubject());
         }
@@ -260,6 +274,7 @@ public class FasController {
     }
 
     @PutMapping("/api/administrator/students/attendance/daily")
+    @Transactional
     public Map<String, String> administratorDailyAttendance(@RequestBody BulkAttendanceRequest request) {
         return saveDailyAttendance(request, null);
     }
@@ -299,12 +314,24 @@ public class FasController {
     }
 
     @GetMapping("/api/faculty/students/attendance")
-    public List<Map<String, Object>> facultyStudentsAttendance() {
-        return allStudentAttendance();
+    public List<Map<String, Object>> facultyStudentsAttendance(Authentication authentication) {
+        var faculty = findFaculty(authentication).orElseThrow(() ->
+                new IllegalArgumentException("Faculty account not found"));
+        if (faculty.getSubject() == null || faculty.getSubject().isBlank()) {
+            throw new IllegalArgumentException("Faculty subject is not configured");
+        }
+        return allStudentAttendance(studentAttendanceRepository.findBySubjectName(faculty.getSubject()));
     }
 
     @PutMapping("/api/faculty/students/attendance")
-    public Map<String, String> facultyUpdateAttendance(@RequestBody AttendanceUpdateRequest request) {
+    public Map<String, String> facultyUpdateAttendance(Authentication authentication,
+                                                        @RequestBody AttendanceUpdateRequest request) {
+        var faculty = findFaculty(authentication).orElseThrow(() ->
+                new IllegalArgumentException("Faculty account not found"));
+        if (request == null || faculty.getSubject() == null
+                || !faculty.getSubject().equals(request.subject())) {
+            throw new IllegalArgumentException("You can update attendance only for " + faculty.getSubject());
+        }
         return updateAttendance(request);
     }
 
@@ -339,23 +366,49 @@ public class FasController {
     private Map<String, String> saveDailyAttendance(BulkAttendanceRequest request, FacultyAccount faculty) {
         if (request == null || request.date() == null || request.date().isBlank()
                 || request.subject() == null || request.subject().isBlank()
-                || request.records() == null) {
+                || request.records() == null || request.records().isEmpty()) {
             throw new IllegalArgumentException("Date, subject and attendance records are required");
         }
+        try {
+            LocalDate.parse(request.date());
+        } catch (DateTimeParseException exception) {
+            throw new IllegalArgumentException("Attendance date must use YYYY-MM-DD format");
+        }
+        if (!SUBJECTS.contains(request.subject())) {
+            throw new IllegalArgumentException("Select a valid subject");
+        }
+        Set<String> studentIds = new HashSet<>();
         for (var attendance : request.records()) {
-            if (attendance.studentId() == null || attendance.status() == null
+            if (attendance == null || attendance.studentId() == null || attendance.status() == null
+                    || attendance.studentId().isBlank()
                     || !("P".equals(attendance.status()) || "AB".equals(attendance.status()))) {
                 throw new IllegalArgumentException("Each student must have P or AB status");
             }
-            var record = dailyAttendanceRepository.findByStudentUsernameAndAttendanceDateAndSubjectName(
-                            attendance.studentId(), request.date(), request.subject())
-                    .orElse(new DailyAttendance(attendance.studentId(), request.date(), request.subject(), attendance.status()));
+            if (!studentIds.add(attendance.studentId())) {
+                throw new IllegalArgumentException("Each student can appear only once in an attendance submission");
+            }
+        }
+        var knownStudentIds = studentRepository.findByUsernameIn(studentIds).stream()
+                .map(StudentAccount::getUsername)
+                .collect(Collectors.toSet());
+        if (!knownStudentIds.containsAll(studentIds)) {
+            throw new IllegalArgumentException("Attendance includes an unknown student");
+        }
+
+        var existingRecords = dailyAttendanceRepository
+                .findByAttendanceDateAndSubjectNameAndStudentUsernameIn(
+                        request.date(), request.subject(), studentIds).stream()
+                .collect(Collectors.toMap(DailyAttendance::getStudentUsername, record -> record));
+        var recordsToSave = request.records().stream().map(attendance -> {
+            var record = existingRecords.getOrDefault(attendance.studentId(),
+                    new DailyAttendance(attendance.studentId(), request.date(), request.subject(), attendance.status()));
             record.setStatus(attendance.status());
             if (faculty != null) {
                 record.setFacultyUsername(faculty.getEmail() == null ? faculty.getUsername() : faculty.getEmail());
             }
-            dailyAttendanceRepository.save(record);
-        }
+            return record;
+        }).toList();
+        dailyAttendanceRepository.saveAll(recordsToSave);
         return Map.of("message", "Daily attendance saved successfully");
     }
 
@@ -365,20 +418,47 @@ public class FasController {
 
     private List<Map<String, Object>> dailyAttendanceReport(String date, String subject, String section,
                                                              String facultyUsername) {
-        return dailyAttendanceRepository.findAllByOrderByAttendanceDateDesc().stream()
+        boolean hasDate = date != null && !date.isBlank();
+        boolean hasSubject = subject != null && !subject.isBlank();
+        var attendanceRecords = hasDate && hasSubject
+                ? dailyAttendanceRepository.findByAttendanceDateAndSubjectNameOrderByAttendanceDateDescIdDesc(date, subject)
+                : hasDate
+                        ? dailyAttendanceRepository.findByAttendanceDateOrderByAttendanceDateDescIdDesc(date)
+                        : hasSubject
+                                ? dailyAttendanceRepository.findBySubjectNameOrderByAttendanceDateDescIdDesc(subject)
+                                : dailyAttendanceRepository.findAllByOrderByAttendanceDateDescIdDesc();
+        if (attendanceRecords.isEmpty()) return List.of();
+        var studentUsernames = attendanceRecords.stream()
+                .map(DailyAttendance::getStudentUsername)
+                .collect(Collectors.toSet());
+        var studentsByUsername = studentRepository.findByUsernameIn(studentUsernames).stream()
+                .collect(Collectors.toMap(
+                        StudentAccount::getUsername,
+                        student -> student,
+                        (first, duplicate) -> first,
+                        LinkedHashMap::new));
+        return attendanceRecords.stream()
                 .filter(record -> date == null || date.isBlank() || date.equals(record.getAttendanceDate()))
                 .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
                 .filter(record -> facultyUsername == null
                         || facultyUsername.equals(record.getFacultyUsername()))
+                .filter(record -> studentsByUsername.containsKey(record.getStudentUsername()))
                 .filter(record -> section == null || section.isBlank()
-                        || section.equals(studentRepository.findByUsername(record.getStudentUsername())
-                                .map(StudentAccount::getSection).orElse("")))
+                        || section.equals(studentsByUsername.get(record.getStudentUsername()).getSection()))
+                .collect(Collectors.toMap(
+                        record -> record.getStudentUsername() + "\u0000"
+                                + record.getAttendanceDate() + "\u0000" + record.getSubjectName(),
+                        record -> record,
+                        (first, duplicate) -> first,
+                        LinkedHashMap::new))
+                .values().stream()
                 .map(record -> {
-                    var student = studentRepository.findByUsername(record.getStudentUsername());
+                    var student = studentsByUsername.get(record.getStudentUsername());
                     return Map.<String, Object>of(
                             "studentId", record.getStudentUsername(),
-                            "name", student.map(StudentAccount::getName).orElse(""),
-                            "section", student.map(StudentAccount::getSection).orElse(""),
+                            "name", student.getName() == null || student.getName().isBlank()
+                                    ? student.getUsername() : student.getName(),
+                            "section", student.getSection() == null ? "" : student.getSection(),
                             "date", record.getAttendanceDate(),
                             "subject", record.getSubjectName(),
                             "status", record.getStatus(),
@@ -388,18 +468,31 @@ public class FasController {
     }
 
     private List<Map<String, Object>> overallAttendanceReport(String subject, String section) {
-        return studentRepository.findAll().stream()
+        var attendanceRecords = subject == null || subject.isBlank()
+                ? dailyAttendanceRepository.findAll()
+                : dailyAttendanceRepository.findBySubjectName(subject);
+        var students = section == null || section.isBlank()
+                ? studentRepository.findAll()
+                : studentRepository.findBySectionOrderByUsernameAsc(section);
+        var recordsByStudent = attendanceRecords.stream()
+                .collect(Collectors.groupingBy(DailyAttendance::getStudentUsername));
+        return students.stream()
+                .collect(Collectors.toMap(
+                        StudentAccount::getUsername,
+                        student -> student,
+                        (first, duplicate) -> first,
+                        LinkedHashMap::new))
+                .values().stream()
                 .filter(student -> section == null || section.isBlank() || section.equals(student.getSection()))
                 .map(student -> {
-                    var records = dailyAttendanceRepository.findByStudentUsernameOrderByAttendanceDateDesc(student.getUsername()).stream()
-                            .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
-                            .toList();
+                    var records = recordsByStudent.getOrDefault(student.getUsername(), List.of());
                     int conducted = records.size();
                     int attended = (int) records.stream().filter(record -> "P".equals(record.getStatus())).count();
                     double percentage = conducted == 0 ? 0 : attended * 100.0 / conducted;
                     return Map.<String, Object>of(
                             "studentId", student.getUsername(),
-                            "name", student.getName() == null ? "" : student.getName(),
+                            "name", student.getName() == null || student.getName().isBlank()
+                                    ? student.getUsername() : student.getName(),
                             "section", student.getSection() == null ? "" : student.getSection(),
                             "conducted", conducted,
                             "attended", attended,
@@ -417,11 +510,22 @@ public class FasController {
     }
 
     private Map<String, String> updateAttendance(AttendanceUpdateRequest request) {
+        if (request == null || request.studentId() == null || request.studentId().isBlank()
+                || request.subject() == null || request.subject().isBlank()
+                || request.conductedSessions() == null || request.attendedSessions() == null) {
+            throw new IllegalArgumentException("Student, subject and session counts are required");
+        }
+        if (!SUBJECTS.contains(request.subject())) {
+            throw new IllegalArgumentException("Select a valid subject");
+        }
+        if (studentRepository.findByUsername(request.studentId()).isEmpty()) {
+            throw new IllegalArgumentException("Student not found");
+        }
         var record = studentAttendanceRepository
                 .findByStudentUsernameAndSubjectName(request.studentId(), request.subject())
-                .orElseThrow();
-        int conducted = 50;
-        int attended = request.attendedSessions() == null ? record.getAttendedSessions() : request.attendedSessions();
+                .orElseGet(() -> new StudentAttendance(request.studentId(), request.subject(), 0, 0));
+        int conducted = request.conductedSessions();
+        int attended = request.attendedSessions();
         if (conducted < 0 || attended < 0 || attended > conducted) {
             throw new IllegalArgumentException("Attended sessions cannot exceed conducted sessions");
         }
@@ -432,7 +536,11 @@ public class FasController {
     }
 
     private List<Map<String, Object>> allStudentAttendance() {
-        var grouped = studentAttendanceRepository.findAll().stream()
+        return allStudentAttendance(studentAttendanceRepository.findAll());
+    }
+
+    private List<Map<String, Object>> allStudentAttendance(List<StudentAttendance> attendanceRecords) {
+        var grouped = attendanceRecords.stream()
                 .collect(Collectors.groupingBy(
                         r -> r.getStudentUsername(),
                         LinkedHashMap::new,

@@ -1,0 +1,3 @@
+spring.datasource.password=
+fas.seed.administrator.password=
+fas.seed.hod.password=
