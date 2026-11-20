@@ -28,6 +28,8 @@ target/
 build/
 !**/src/main/**/build/
 !**/src/test/**/build/
+fas-db.mv.db
+fas-db.trace.db
 
 ### VS Code ###
 .vscode/
