@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import heroImage from './assets/hero.png'
 import './App.css'
 
 const accounts = {
@@ -653,12 +654,15 @@ function App() {
 
       <section className="hero">
         <div>
-          <p>Empowering Academic Excellence</p>
-          <h1>Learning and Growth — Together</h1>
-          <span>Reliable academic operations for students, faculty, department heads and administrators.</span>
-          <div className="hero-actions"><button onClick={() => document.getElementById('academics')?.scrollIntoView({ behavior: 'smooth' })}>Explore Academics</button><button onClick={() => document.getElementById('portals')?.scrollIntoView({ behavior: 'smooth' })}>Access Portals</button></div>
+          <p className="hero-badge">Faculty Attendance System</p>
+          <h1>Every class, <em>accounted for.</em></h1>
+          <span>Faculty mark attendance in seconds. Students see where they stand. Administrators and HODs see the whole department at a glance.</span>
+          <div className="hero-actions"><button onClick={() => document.getElementById('portals')?.scrollIntoView({ behavior: 'smooth' })}>Get started</button><button onClick={() => document.getElementById('academics')?.scrollIntoView({ behavior: 'smooth' })}>Explore academics</button></div>
         </div>
-        <div className="hero-panel"><small>Academic Year 2026–27</small><strong>One campus. Every role. Clear academic records.</strong><div><span>Accredited Programs</span><b>24+</b></div><div><span>Students</span><b>3,200+</b></div></div>
+        <div className="hero-visual">
+          <div className="hero-image-accent" aria-hidden="true"></div>
+          <img src={heroImage} alt="Attendance management dashboard illustration" />
+        </div>
       </section>
 
       <section id="academics" className="institution-info">
