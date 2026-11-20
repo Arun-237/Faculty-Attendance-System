@@ -87,6 +87,7 @@ function App() {
   const [reportFilterClass, setReportFilterClass] = useState('')
   const [hodReportMode, setHodReportMode] = useState('Daily')
   const [reportStatus, setReportStatus] = useState({})
+  const [activeAuthPortal, setActiveAuthPortal] = useState(null)
   const successMessageRef = useRef(null)
   const errorMessageRef = useRef(null)
 
@@ -109,10 +110,41 @@ function App() {
   }, [error])
 
   function beginRoleLogin(role) {
+    setActiveAuthPortal(role)
+    setSignupMode(false)
+    setFacultySignupMode(false)
+    setStudentEmail('')
+    setStudentPassword('')
+    setStudentId('')
+    setStudentName('')
+    setFacultyName('')
+    setFacultyEmail('')
+    setFacultyPassword('')
     setRoleLoginFor(role)
     setRoleLoginId('')
     setRoleLoginPassword('')
     setError('')
+  }
+
+  function beginStudentPortal() {
+    setActiveAuthPortal('Student')
+    setRoleLoginFor(null)
+    setSignupMode(false)
+    setFacultySignupMode(false)
+    setFacultyName('')
+    setFacultyEmail('')
+    setFacultyPassword('')
+  }
+
+  function beginFacultyPortal() {
+    setActiveAuthPortal('Faculty')
+    setRoleLoginFor(null)
+    setFacultySignupMode(false)
+    setSignupMode(false)
+    setStudentId('')
+    setStudentName('')
+    setStudentEmail('')
+    setStudentPassword('')
   }
 
   async function login(role) {
@@ -269,6 +301,10 @@ function App() {
 
   function logout() {
     sessionStorage.removeItem(portalSessionKey)
+    setActiveAuthPortal(null)
+    setSignupMode(false)
+    setFacultySignupMode(false)
+    setRoleLoginFor(null)
     setSession(null)
     setActiveRole(null)
     setActiveSection(null)
@@ -799,27 +835,32 @@ function App() {
               <div className="portal-icon">{role.charAt(0)}</div>
               <h3>{role} Portal</h3>
               <p>{role === 'Student' ? 'View subject attendance and academic records.' : role === 'Faculty' ? 'Manage classes and attendance sessions.' : role === 'HOD' ? 'Lead department and institutional operations.' : 'Configure and administer institutional data.'}</p>
-              {role === 'Student' ? (
-                <div className="student-auth">
-                  {signupMode ? (
-                    <>
-                      <input value={studentId} onChange={(event) => setStudentId(event.target.value.toUpperCase())} placeholder="Student ID: 25CSVVIT01" maxLength={11} />
-                      <input value={studentName} onChange={(event) => setStudentName(event.target.value)} placeholder="Student name" maxLength={100} />
+              {role === 'Student' && (
+                activeAuthPortal === 'Student' ? (
+                  <div className="student-auth">
+                    {signupMode ? (
+                      <>
+                        <input value={studentId} onChange={(event) => setStudentId(event.target.value.toUpperCase())} placeholder="Student ID: 25CSVVIT01" maxLength={11} />
+                        <input value={studentName} onChange={(event) => setStudentName(event.target.value)} placeholder="Student name" maxLength={100} />
+                        <input type="email" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} placeholder="Email address" maxLength={255} />
+                      </>
+                    ) : (
                       <input type="email" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} placeholder="Email address" maxLength={255} />
-                    </>
-                  ) : (
-                    <input type="email" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} placeholder="Email address" maxLength={255} />
-                  )}
-                  <input type="password" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} placeholder="8-character password" maxLength={8} />
-                  {apiResult?.title === 'Signup successful' && <small className="signup-success">{apiResult.permissions}</small>}
-                  <div className="auth-actions">
-                    <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
-                    <button disabled={loading} className="secondary" onClick={() => signupMode ? signupStudent() : setSignupMode(true)}>{signupMode ? 'Confirm Signup' : 'Signup'}</button>
+                    )}
+                    <input type="password" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} placeholder="8-character password" maxLength={8} />
+                    {apiResult?.title === 'Signup successful' && <small className="signup-success">{apiResult.permissions}</small>}
+                    <div className="auth-actions">
+                      <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
+                      <button disabled={loading} className="secondary" onClick={() => signupMode ? signupStudent() : setSignupMode(true)}>{signupMode ? 'Confirm Signup' : 'Signup'}</button>
+                    </div>
+                    {!signupMode && <button className="text-mode" onClick={() => setSignupMode(true)}>New student? Create individual account</button>}
                   </div>
-                  {!signupMode && <button className="text-mode" onClick={() => setSignupMode(true)}>New student? Create individual account</button>}
-                </div>
-              ) : (
-                role === 'Faculty' ? (
+                ) : (
+                  <button type="button" onClick={beginStudentPortal}>Sign in as Student</button>
+                )
+              )}
+              {role === 'Faculty' && (
+                activeAuthPortal === 'Faculty' ? (
                   <div className="role-auth">
                     {facultySignupMode ? (
                       <>
@@ -845,13 +886,18 @@ function App() {
                     </div>
                     {facultySignupMode && <button className="text-mode" onClick={() => setFacultySignupMode(false)}>Cancel faculty signup</button>}
                   </div>
-                ) : roleLoginFor === role ? (
+                ) : (
+                  <button type="button" onClick={beginFacultyPortal}>Sign in as Faculty</button>
+                )
+              )}
+              {(role === 'Administrator' || role === 'HOD') && (
+                activeAuthPortal === role ? (
                   <div className="role-auth">
                     <input value={roleLoginId} onChange={(event) => setRoleLoginId(event.target.value)} placeholder={`${role} ID`} />
                     <input type="password" value={roleLoginPassword} onChange={(event) => setRoleLoginPassword(event.target.value)} placeholder="Password" />
                     <div className="auth-actions">
                       <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
-                      <button className="secondary" onClick={() => { setRoleLoginFor(null); setError('') }}>Cancel</button>
+                      <button className="secondary" onClick={() => { setActiveAuthPortal(null); setRoleLoginFor(null); setRoleLoginId(''); setRoleLoginPassword(''); setError('') }}>Cancel</button>
                     </div>
                   </div>
                 ) : (
