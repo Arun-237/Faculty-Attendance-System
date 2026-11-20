@@ -23,6 +23,8 @@ public class DailyAttendance {
 
     @Column(nullable = false)
     private String status;
+    @Column(name = "faculty_username")
+    private String facultyUsername;
 
     public DailyAttendance() {}
 
@@ -39,4 +41,6 @@ public class DailyAttendance {
     public String getSubjectName() { return subjectName; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getFacultyUsername() { return facultyUsername; }
+    public void setFacultyUsername(String facultyUsername) { this.facultyUsername = facultyUsername; }
 }

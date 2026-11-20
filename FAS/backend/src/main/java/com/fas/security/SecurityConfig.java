@@ -60,7 +60,10 @@ public class SecurityConfig {
             if (hod.isPresent() && hod.get().isActive()) {
                 return createUser(username, hod.get().getPassword(), "HOD");
             }
-            var faculty = faculties.findByUsername(username);
+            var faculty = faculties.findByEmail(username);
+            if (faculty.isEmpty()) {
+                faculty = faculties.findByUsername(username);
+            }
             if (faculty.isPresent() && faculty.get().isActive()) {
                 return createUser(username, faculty.get().getPassword(), "FACULTY");
             }

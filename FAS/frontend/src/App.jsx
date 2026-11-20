@@ -5,7 +5,6 @@ import './App.css'
 const accounts = {
   Administrator: { username: 'Admin', password: 'ADMINVVIT' },
   HOD: { username: 'HOD', password: 'HODVVIT' },
-  Faculty: { username: 'Faculty1', password: 'VVIT' },
 }
 
 const publicRoles = ['Administrator', 'HOD', 'Faculty', 'Student']
@@ -61,6 +60,11 @@ function App() {
   const [studentEmail, setStudentEmail] = useState('')
   const [studentPassword, setStudentPassword] = useState('')
   const [signupMode, setSignupMode] = useState(false)
+  const [facultySignupMode, setFacultySignupMode] = useState(false)
+  const [facultyName, setFacultyName] = useState('')
+  const [facultyEmail, setFacultyEmail] = useState('')
+  const [facultyPassword, setFacultyPassword] = useState('')
+  const [facultySubject, setFacultySubject] = useState('DSA')
   const [portalCredentials, setPortalCredentials] = useState(savedPortalSession?.credentials || null)
   const [attendanceList, setAttendanceList] = useState([])
   const [selectedStudent, setSelectedStudent] = useState('')
@@ -114,6 +118,9 @@ function App() {
   async function login(role) {
     if (role === 'Student') {
       return loginStudent()
+    }
+    if (role === 'Faculty') {
+      return loginFaculty()
     }
     const enteredId = roleLoginId.trim()
     const enteredPassword = roleLoginPassword
@@ -185,6 +192,62 @@ function App() {
     }
   }
 
+  async function loginFaculty() {
+    setLoading(true)
+    setError('')
+    try {
+      const credentials = btoa(`${facultyEmail.trim().toLowerCase()}:${facultyPassword}`)
+      const response = await fetch('http://localhost:8080/api/me', {
+        headers: { Authorization: `Basic ${credentials}` },
+      })
+      if (!response.ok) throw new Error('Invalid user mail/id or password')
+      const sessionDetails = await response.json()
+      setSession(sessionDetails)
+      setActiveRole('Faculty')
+      setActiveSection(portals.Faculty[0][0])
+      setPortalCredentials(credentials)
+      setDailySubject(sessionDetails.subject || 'DSA')
+      sessionStorage.setItem(portalSessionKey, JSON.stringify({
+        activeRole: 'Faculty',
+        activeSection: portals.Faculty[0][0],
+        credentials,
+        session: sessionDetails,
+      }))
+      setView('portal')
+      await loadClassStudents(selectedClass, credentials, 'Faculty')
+      await loadPortalReport(credentials, '', sessionDetails.subject || 'DSA', '', 'Faculty')
+    } catch (loginError) {
+      setError(loginError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function signupFaculty() {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch('http://localhost:8080/api/public/faculty/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: facultyName,
+          email: facultyEmail,
+          password: facultyPassword,
+          subject: facultySubject,
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Faculty signup failed')
+      setApiResult({ title: 'Signup successful', permissions: result.message })
+      setFacultySignupMode(false)
+    } catch (signupError) {
+      setError(signupError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function signupStudent() {
     setLoading(true)
     setError('')
@@ -218,6 +281,10 @@ function App() {
     setStudentName('')
     setStudentEmail('')
     setStudentPassword('')
+    setFacultyName('')
+    setFacultyEmail('')
+    setFacultyPassword('')
+    setFacultySignupMode(false)
   }
 
   async function restorePortalSession() {
@@ -246,6 +313,9 @@ function App() {
       } else if (saved.activeRole === 'HOD') {
         await loadHodReport(saved.credentials)
       } else {
+        if (saved.activeRole === 'Faculty') {
+          setDailySubject(sessionDetails.subject || 'DSA')
+        }
         await loadClassStudents(selectedClass, saved.credentials, saved.activeRole)
         await loadPortalReport(saved.credentials, reportFilterDate, reportFilterSubject, reportFilterClass, saved.activeRole)
       }
@@ -344,6 +414,7 @@ function App() {
       return
     }
     const role = activeRole === 'Administrator' ? 'administrator' : 'faculty'
+    const subject = activeRole === 'Faculty' ? (session?.subject || dailySubject) : dailySubject
     try {
       const response = await fetch(`http://localhost:8080/api/${role}/students/attendance/daily`, {
         method: 'PUT',
@@ -353,7 +424,7 @@ function App() {
         },
         body: JSON.stringify({
           date: attendanceDate,
-          subject: dailySubject,
+          subject,
           records: classStudents.map((student) => ({
             studentId: student.studentId,
             status: attendanceStatus[student.studentId] || 'P',
@@ -506,6 +577,12 @@ function App() {
               <tr key={`${record.date}-${record.subject}`}><td>{record.date}</td><td>{record.subject}</td><td>{record.status === 'P' ? 'Present' : 'Absent'}</td></tr>
             ))}
           </tbody></table>
+          <h3>Overall by Subject</h3>
+          <table className="data-table"><thead><tr><th>Subject</th><th>Conducted</th><th>Present</th><th>Overall</th></tr></thead><tbody>
+            {(attendance?.subjectSummaries || []).map((record) => (
+              <tr key={record.subject}><td>{record.subject}</td><td>{record.conducted}</td><td>{record.attended}</td><td>{record.overall}%</td></tr>
+            ))}
+          </tbody></table>
         </section>
       )
     }
@@ -520,7 +597,9 @@ function App() {
               <div className="working-form attendance-editor">
                 <label>Class<select value={selectedClass} onChange={(event) => { setSelectedClass(event.target.value); loadClassStudents(event.target.value) }}><option>Class-A</option><option>Class-B</option></select></label>
                 <label>Date<input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} /></label>
-                <label>Subject<select value={dailySubject} onChange={(event) => setDailySubject(event.target.value)}><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>
+                {activeRole === 'Faculty'
+                  ? <label>Subject<input value={session?.subject || dailySubject} readOnly /></label>
+                  : <label>Subject<select value={dailySubject} onChange={(event) => setDailySubject(event.target.value)}><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>}
               </div>
               <table className="data-table"><thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th>Attendance</th></tr></thead><tbody>
                 {classStudents.map((student) => (
@@ -549,7 +628,9 @@ function App() {
               <h3>Attendance Report</h3>
               <div className="working-form attendance-editor">
                 <label>Date<input type="date" value={reportFilterDate} onChange={(event) => setReportFilterDate(event.target.value)} /></label>
-                <label>Subject<select value={reportFilterSubject} onChange={(event) => setReportFilterSubject(event.target.value)}><option value="">All Subjects</option><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>
+                {activeRole === 'Faculty'
+                  ? <label>Subject<input value={session?.subject || dailySubject} readOnly /></label>
+                  : <label>Subject<select value={reportFilterSubject} onChange={(event) => setReportFilterSubject(event.target.value)}><option value="">All Subjects</option><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>}
                 <label>Class<select value={reportFilterClass} onChange={(event) => setReportFilterClass(event.target.value)}><option value="">All Classes</option><option>Class-A</option><option>Class-B</option></select></label>
                 <button type="button" onClick={() => loadPortalReport(portalCredentials)}>Filter Report</button>
                 <button type="button" className="text-mode" onClick={() => { setReportFilterDate(''); setReportFilterSubject(''); setReportFilterClass(''); loadPortalReport(portalCredentials, '', '', '') }}>Clear Filters</button>
@@ -700,7 +781,33 @@ function App() {
                   {!signupMode && <button className="text-mode" onClick={() => setSignupMode(true)}>New student? Create individual account</button>}
                 </div>
               ) : (
-                roleLoginFor === role ? (
+                role === 'Faculty' ? (
+                  <div className="role-auth">
+                    {facultySignupMode ? (
+                      <>
+                        <input value={facultyName} onChange={(event) => setFacultyName(event.target.value)} placeholder="Faculty name" maxLength={100} />
+                        <input type="email" value={facultyEmail} onChange={(event) => setFacultyEmail(event.target.value)} placeholder="Faculty email" maxLength={255} />
+                        <input type="password" value={facultyPassword} onChange={(event) => setFacultyPassword(event.target.value)} placeholder="Password (8+ characters)" />
+                        <select value={facultySubject} onChange={(event) => setFacultySubject(event.target.value)}>
+                          <option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option>
+                        </select>
+                      </>
+                    ) : (
+                      <>
+                        <input type="email" value={facultyEmail} onChange={(event) => setFacultyEmail(event.target.value)} placeholder="Faculty email" maxLength={255} />
+                        <input type="password" value={facultyPassword} onChange={(event) => setFacultyPassword(event.target.value)} placeholder="Password" />
+                      </>
+                    )}
+                    {apiResult?.title === 'Signup successful' && <small className="signup-success">{apiResult.permissions}</small>}
+                    <div className="auth-actions">
+                      <button disabled={loading} onClick={() => facultySignupMode ? setFacultySignupMode(false) : login(role)}>{facultySignupMode ? 'Back to Login' : (loading ? 'Signing in...' : 'Login')}</button>
+                      <button disabled={loading} className="secondary" onClick={() => facultySignupMode ? signupFaculty() : setFacultySignupMode(true)}>
+                        {facultySignupMode ? 'Confirm Signup' : 'Signup'}
+                      </button>
+                    </div>
+                    {facultySignupMode && <button className="text-mode" onClick={() => setFacultySignupMode(false)}>Cancel faculty signup</button>}
+                  </div>
+                ) : roleLoginFor === role ? (
                   <div className="role-auth">
                     <input value={roleLoginId} onChange={(event) => setRoleLoginId(event.target.value)} placeholder={`${role} ID`} />
                     <input type="password" value={roleLoginPassword} onChange={(event) => setRoleLoginPassword(event.target.value)} placeholder="Password" />

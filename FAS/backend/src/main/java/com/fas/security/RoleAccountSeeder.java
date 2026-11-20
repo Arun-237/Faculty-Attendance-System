@@ -34,7 +34,13 @@ public class RoleAccountSeeder implements ApplicationRunner {
             hods.save(new HodAccount("HOD", passwordEncoder.encode("HODVVIT")));
         }
         if (faculties.findByUsername("Faculty1").isEmpty()) {
-            faculties.save(new FacultyAccount("Faculty1", passwordEncoder.encode("VVIT")));
+            faculties.save(new FacultyAccount("Faculty1", "faculty1@vvit.edu", passwordEncoder.encode("VVIT"), "DSA"));
+        } else {
+            var faculty = faculties.findByUsername("Faculty1").orElseThrow();
+            if (faculty.getEmail() == null) faculty.setEmail("faculty1@vvit.edu");
+            if (faculty.getName() == null) faculty.setName("Faculty1");
+            if (faculty.getSubject() == null) faculty.setSubject("DSA");
+            faculties.save(faculty);
         }
     }
 }

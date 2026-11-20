@@ -10,37 +10,49 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import com.fas.repository.StudentAttendanceRepository;
 import com.fas.repository.StudentRepository;
 import com.fas.repository.DailyAttendanceRepository;
+import com.fas.repository.FacultyRepository;
 import com.fas.entity.StudentAccount;
 import com.fas.entity.DailyAttendance;
+import com.fas.entity.FacultyAccount;
 
 @RestController
 public class FasController {
     private final StudentAttendanceRepository studentAttendanceRepository;
     private final StudentRepository studentRepository;
     private final DailyAttendanceRepository dailyAttendanceRepository;
+    private final FacultyRepository facultyRepository;
     private final PasswordEncoder passwordEncoder;
 
     public FasController(StudentAttendanceRepository studentAttendanceRepository,
                          StudentRepository studentRepository,
                          DailyAttendanceRepository dailyAttendanceRepository,
+                         FacultyRepository facultyRepository,
                          PasswordEncoder passwordEncoder) {
         this.studentAttendanceRepository = studentAttendanceRepository;
         this.studentRepository = studentRepository;
         this.dailyAttendanceRepository = dailyAttendanceRepository;
+        this.facultyRepository = facultyRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     @GetMapping("/api/public/health")
     public Map<String, String> health() {
         return Map.of("status", "UP", "service", "FAS Backend");
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
     }
 
     @GetMapping("/api/me")
@@ -57,6 +69,14 @@ public class FasController {
                     ? account.getUsername()
                     : account.getName()).orElse(authentication.getName()));
             response.put("section", student.map(StudentAccount::getSection).orElse(""));
+        }
+        if (roles.contains("ROLE_FACULTY")) {
+            var faculty = findFaculty(authentication);
+            response.put("name", faculty.map(account -> account.getName() == null || account.getName().isBlank()
+                    ? account.getUsername()
+                    : account.getName()).orElse(authentication.getName()));
+            response.put("email", faculty.map(account -> account.getEmail() == null ? account.getUsername() : account.getEmail()).orElse(authentication.getName()));
+            response.put("subject", faculty.map(FacultyAccount::getSubject).orElse(""));
         }
         return response;
     }
@@ -113,9 +133,29 @@ public class FasController {
                 "date", record.getAttendanceDate(),
                 "status", record.getStatus()
         )).toList();
+        var subjectSummaries = List.of("DSA", "DBMS", "OS", "Python", "GenAI").stream()
+                .map(subjectName -> {
+                    var subjectRecords = dailyAttendanceRepository
+                            .findByStudentUsernameOrderByAttendanceDateDesc(authentication.getName()).stream()
+                            .filter(record -> subjectName.equals(record.getSubjectName()))
+                            .toList();
+                    int subjectConducted = subjectRecords.size();
+                    int subjectAttended = (int) subjectRecords.stream()
+                            .filter(record -> "P".equals(record.getStatus()))
+                            .count();
+                    double subjectOverall = subjectConducted == 0 ? 0
+                            : subjectAttended * 100.0 / subjectConducted;
+                    return Map.<String, Object>of(
+                            "subject", subjectName,
+                            "conducted", subjectConducted,
+                            "attended", subjectAttended,
+                            "overall", Math.round(subjectOverall * 10.0) / 10.0
+                    );
+                }).toList();
 
         return Map.of(
                 "subjects", subjects,
+                "subjectSummaries", subjectSummaries,
                 "conducted", conducted,
                 "attended", attended,
                 "overall", Math.round(overall * 10.0) / 10.0,
@@ -161,6 +201,36 @@ public class FasController {
         return ResponseEntity.ok(Map.of("message", "Student registered successfully"));
     }
 
+    public record FacultySignupRequest(String name, String email, String password, String subject) {}
+
+    @PostMapping("/api/public/faculty/signup")
+    public ResponseEntity<Map<String, String>> signupFaculty(@RequestBody FacultySignupRequest request) {
+        String name = request.name() == null ? "" : request.name().trim();
+        String email = request.email() == null ? "" : request.email().trim().toLowerCase();
+        String password = request.password() == null ? "" : request.password();
+        String subject = request.subject() == null ? "" : request.subject().trim();
+        List<String> subjects = List.of("DSA", "DBMS", "OS", "Python", "GenAI");
+
+        if (name.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Faculty name is required"));
+        }
+        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Enter a valid email address"));
+        }
+        if (password.length() < 8) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Password must contain at least 8 characters"));
+        }
+        if (!subjects.contains(subject)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Select a valid subject"));
+        }
+        if (facultyRepository.findByEmail(email).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Email is already registered"));
+        }
+
+        facultyRepository.save(new FacultyAccount(name, email, passwordEncoder.encode(password), subject));
+        return ResponseEntity.ok(Map.of("message", "Faculty registered successfully"));
+    }
+
     @GetMapping("/api/faculty/students")
     public List<Map<String, Object>> facultyStudents(
             @RequestParam(required = false, defaultValue = "Class-A") String section) {
@@ -177,13 +247,20 @@ public class FasController {
     public record BulkAttendanceRequest(String date, String subject, List<AttendanceStatusRequest> records) {}
 
     @PutMapping("/api/faculty/students/attendance/daily")
-    public Map<String, String> facultyDailyAttendance(@RequestBody BulkAttendanceRequest request) {
-        return saveDailyAttendance(request);
+    public Map<String, String> facultyDailyAttendance(Authentication authentication,
+                                                       @RequestBody BulkAttendanceRequest request) {
+        var faculty = findFaculty(authentication).orElseThrow(() ->
+                new IllegalArgumentException("Faculty account not found"));
+        if (request == null || request.subject() == null
+                || !faculty.getSubject().equals(request.subject())) {
+            throw new IllegalArgumentException("You can submit attendance only for " + faculty.getSubject());
+        }
+        return saveDailyAttendance(request, faculty);
     }
 
     @PutMapping("/api/administrator/students/attendance/daily")
     public Map<String, String> administratorDailyAttendance(@RequestBody BulkAttendanceRequest request) {
-        return saveDailyAttendance(request);
+        return saveDailyAttendance(request, null);
     }
 
     @GetMapping("/api/hod/attendance/report")
@@ -203,10 +280,13 @@ public class FasController {
 
     @GetMapping("/api/faculty/attendance/report")
     public List<Map<String, Object>> facultyAttendanceReport(
+            Authentication authentication,
             @RequestParam(required = false) String date,
             @RequestParam(required = false) String subject,
             @RequestParam(required = false) String section) {
-        return dailyAttendanceReport(date, subject, section);
+        var faculty = findFaculty(authentication).orElseThrow(() ->
+                new IllegalArgumentException("Faculty account not found"));
+        return dailyAttendanceReport(date, faculty.getSubject(), section, faculty.getEmail());
     }
 
     @GetMapping("/api/administrator/attendance/report")
@@ -232,11 +312,6 @@ public class FasController {
         return allStudentAttendance();
     }
 
-    @PutMapping("/api/hod/students/attendance")
-    public Map<String, String> hodUpdateAttendance(@RequestBody AttendanceUpdateRequest request) {
-        return updateAttendance(request);
-    }
-
     @GetMapping("/api/administrator/students/attendance")
     public List<Map<String, Object>> administratorStudentsAttendance() {
         return allStudentAttendance();
@@ -260,7 +335,7 @@ public class FasController {
                 )).toList();
     }
 
-    private Map<String, String> saveDailyAttendance(BulkAttendanceRequest request) {
+    private Map<String, String> saveDailyAttendance(BulkAttendanceRequest request, FacultyAccount faculty) {
         if (request == null || request.date() == null || request.date().isBlank()
                 || request.subject() == null || request.subject().isBlank()
                 || request.records() == null) {
@@ -275,15 +350,25 @@ public class FasController {
                             attendance.studentId(), request.date(), request.subject())
                     .orElse(new DailyAttendance(attendance.studentId(), request.date(), request.subject(), attendance.status()));
             record.setStatus(attendance.status());
+            if (faculty != null) {
+                record.setFacultyUsername(faculty.getEmail() == null ? faculty.getUsername() : faculty.getEmail());
+            }
             dailyAttendanceRepository.save(record);
         }
         return Map.of("message", "Daily attendance saved successfully");
     }
 
     private List<Map<String, Object>> dailyAttendanceReport(String date, String subject, String section) {
+        return dailyAttendanceReport(date, subject, section, null);
+    }
+
+    private List<Map<String, Object>> dailyAttendanceReport(String date, String subject, String section,
+                                                             String facultyUsername) {
         return dailyAttendanceRepository.findAllByOrderByAttendanceDateDesc().stream()
                 .filter(record -> date == null || date.isBlank() || date.equals(record.getAttendanceDate()))
                 .filter(record -> subject == null || subject.isBlank() || subject.equals(record.getSubjectName()))
+                .filter(record -> facultyUsername == null
+                        || facultyUsername.equals(record.getFacultyUsername()))
                 .filter(record -> section == null || section.isBlank()
                         || section.equals(studentRepository.findByUsername(record.getStudentUsername())
                                 .map(StudentAccount::getSection).orElse("")))
@@ -295,7 +380,8 @@ public class FasController {
                             "section", student.map(StudentAccount::getSection).orElse(""),
                             "date", record.getAttendanceDate(),
                             "subject", record.getSubjectName(),
-                            "status", record.getStatus()
+                            "status", record.getStatus(),
+                            "facultyUsername", record.getFacultyUsername() == null ? "" : record.getFacultyUsername()
                     );
                 }).toList();
     }
@@ -320,6 +406,13 @@ public class FasController {
                             "overall", Math.round(percentage * 10.0) / 10.0
                     );
                 }).toList();
+    }
+
+    private Optional<FacultyAccount> findFaculty(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) return Optional.empty();
+        var byEmail = facultyRepository.findByEmail(authentication.getName().toLowerCase());
+        if (byEmail.isPresent()) return byEmail;
+        return facultyRepository.findByUsername(authentication.getName());
     }
 
     private Map<String, String> updateAttendance(AttendanceUpdateRequest request) {
