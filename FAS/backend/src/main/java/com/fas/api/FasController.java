@@ -176,8 +176,8 @@ public class FasController {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "Student ID must be between 25CSVVIT01 and 25CSVVIT50"));
         }
-        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Enter a valid email address"));
+        if (!email.matches("^[A-Za-z0-9+_.-]+@gmail\\.com$")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Email must be a Gmail address, for example name@gmail.com"));
         }
         if (studentRepository.findByUsername(studentId).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
@@ -214,8 +214,8 @@ public class FasController {
         if (name.isBlank() || name.length() < 2 || name.length() > 100) {
             return ResponseEntity.badRequest().body(Map.of("message", "Faculty name must be 2–100 characters"));
         }
-        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Enter a valid email address"));
+        if (!email.matches("^[A-Za-z0-9+_.-]+@gmail\\.com$")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Email must be a Gmail address, for example name@gmail.com"));
         }
         if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8}$")) {
             return ResponseEntity.badRequest().body(Map.of(
