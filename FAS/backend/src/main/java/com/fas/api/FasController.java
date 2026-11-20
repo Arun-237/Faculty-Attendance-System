@@ -187,12 +187,12 @@ public class FasController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                     "message", "Email is already registered"));
         }
-        if (!password.matches("^(?=.*[0-9])[A-Z][a-z0-9]{7}$")) {
+        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8,12}$")) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "Password must have 8 characters: 1 capital letter, lowercase letters/numbers and at least 1 number"));
+                    "message", "Password must be 8–12 characters with uppercase, lowercase and a number"));
         }
-        if (name.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Student name is required"));
+        if (name.isBlank() || name.length() < 2 || name.length() > 100) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Student name must be 2–100 characters"));
         }
 
         int number = Integer.parseInt(studentId.substring(studentId.length() - 2));
@@ -211,14 +211,15 @@ public class FasController {
         String subject = request.subject() == null ? "" : request.subject().trim();
         List<String> subjects = List.of("DSA", "DBMS", "OS", "Python", "GenAI");
 
-        if (name.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Faculty name is required"));
+        if (name.isBlank() || name.length() < 2 || name.length() > 100) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Faculty name must be 2–100 characters"));
         }
         if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             return ResponseEntity.badRequest().body(Map.of("message", "Enter a valid email address"));
         }
-        if (password.length() < 8) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Password must contain at least 8 characters"));
+        if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{8,12}$")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Password must be 8–12 characters with uppercase, lowercase and a number"));
         }
         if (!subjects.contains(subject)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Select a valid subject"));

@@ -123,6 +123,8 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .student-auth button.secondary, .role-auth button.secondary { background: #f4f1e8; color: var(--navy); border: 1px solid var(--border); }
 .student-auth button.text-mode { width: auto; background: transparent; color: var(--green); border: 0; padding: 4px; font-size: 12px; }
 .signup-success { color: var(--success); text-align: left; }
+.field-hint { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.field-hint.valid { color: var(--success); }
 
 .error { color: var(--error); background: var(--error-bg); border: 1px solid #fecdd3; padding: 12px 14px; border-radius: 11px; margin: 10px 0; }
 .success { color: var(--success); background: var(--success-bg); border: 1px solid #a7f3d0; padding: 12px 14px; border-radius: 11px; margin: 10px 0; display: grid; gap: 3px; }
