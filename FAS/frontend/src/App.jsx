@@ -733,12 +733,14 @@ function App() {
               <button className={activeSection === title ? 'portal-nav active' : 'portal-nav'} onClick={() => openSection(title)} key={title}>{title}</button>
             ))}
           </nav>
-          <button className="portal-logout" onClick={logout}>Logout</button>
         </aside>
         <main>
           <header className="portal-header">
             <div><p>Independent {activeRole} Workspace</p><h1>{activeRole} Dashboard</h1></div>
-            <div className="profile"><span>{(session?.name || session?.username)?.[0]?.toUpperCase()}</span><div><strong>{session?.name || session?.username}</strong><small>{session?.username} · {activeRole}</small></div></div>
+            <div className="profile-actions">
+              <div className="profile"><span>{(session?.name || session?.username)?.[0]?.toUpperCase()}</span><div><strong>{session?.name || session?.username}</strong><small>{session?.username} · {activeRole}</small></div></div>
+              <button type="button" className="portal-logout" onClick={logout}>Logout</button>
+            </div>
           </header>
           {activeRole === 'Student' && (
             <section className="student-metrics">
@@ -811,7 +813,7 @@ function App() {
                   <input type="password" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} placeholder="8-character password" maxLength={8} />
                   {apiResult?.title === 'Signup successful' && <small className="signup-success">{apiResult.permissions}</small>}
                   <div className="auth-actions">
-                    <button disabled={loading} onClick={() => login(role)}>{loading ? 'Signing in...' : 'Login'}</button>
+                    <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
                     <button disabled={loading} className="secondary" onClick={() => signupMode ? signupStudent() : setSignupMode(true)}>{signupMode ? 'Confirm Signup' : 'Signup'}</button>
                   </div>
                   {!signupMode && <button className="text-mode" onClick={() => setSignupMode(true)}>New student? Create individual account</button>}
@@ -836,7 +838,7 @@ function App() {
                     )}
                     {apiResult?.title === 'Signup successful' && <small className="signup-success">{apiResult.permissions}</small>}
                     <div className="auth-actions">
-                      <button disabled={loading} onClick={() => facultySignupMode ? setFacultySignupMode(false) : login(role)}>{facultySignupMode ? 'Back to Login' : (loading ? 'Signing in...' : 'Login')}</button>
+                      <button disabled={loading} onClick={() => facultySignupMode ? setFacultySignupMode(false) : login(role)}>{facultySignupMode ? 'Back to Login' : (loading ? 'Logging...' : 'Login')}</button>
                       <button disabled={loading} className="secondary" onClick={() => facultySignupMode ? signupFaculty() : setFacultySignupMode(true)}>
                         {facultySignupMode ? 'Confirm Signup' : 'Signup'}
                       </button>
@@ -848,7 +850,7 @@ function App() {
                     <input value={roleLoginId} onChange={(event) => setRoleLoginId(event.target.value)} placeholder={`${role} ID`} />
                     <input type="password" value={roleLoginPassword} onChange={(event) => setRoleLoginPassword(event.target.value)} placeholder="Password" />
                     <div className="auth-actions">
-                      <button disabled={loading} onClick={() => login(role)}>{loading ? 'Signing in...' : 'Login'}</button>
+                      <button disabled={loading} onClick={() => login(role)}>{loading ? 'Logging...' : 'Login'}</button>
                       <button className="secondary" onClick={() => { setRoleLoginFor(null); setError('') }}>Cancel</button>
                     </div>
                   </div>

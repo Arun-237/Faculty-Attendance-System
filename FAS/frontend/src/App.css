@@ -146,8 +146,6 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
 .portal-shell aside nav { display: grid; gap: 7px; }
 .portal-nav { border: 0; border-radius: 10px; background: transparent; color: #d8dfda; padding: 12px; text-align: left; cursor: pointer; transition: .18s ease; }
 .portal-nav:hover, .portal-nav.active { background: rgba(221,175,69,.16); color: white; transform: translateX(3px); }
-.portal-logout { margin-top: auto; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04); color: white; border-radius: 10px; padding: 11px; cursor: pointer; }
-.portal-logout:hover { background: #a33a44; border-color: #a33a44; }
 .portal-shell main { padding: 34px 40px; min-width: 0; }
 .portal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .portal-header p { color: var(--green); margin: 0 0 5px; font-weight: 800; }
@@ -156,6 +154,19 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
 .profile > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: var(--green-soft); color: var(--green); font-weight: 900; }
 .profile div { display: grid; }
 .profile small { color: var(--muted); }
+.profile-actions { display: grid; justify-items: end; gap: 7px; }
+.profile-actions .portal-logout {
+  margin: 0;
+  min-width: 116px;
+  border: 1px solid #f0c4c7;
+  background: #fff5f5;
+  color: #a33a44;
+  border-radius: 9px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 800;
+}
+.profile-actions .portal-logout:hover { background: #a33a44; border-color: #a33a44; color: white; }
 
 .student-metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 18px; }
 .student-metrics article, .working-section {
@@ -235,7 +246,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .portal-label { display: none; }
   .portal-shell aside nav { display: flex; margin-left: 10px; }
   .portal-nav { white-space: nowrap; }
-  .portal-logout { margin: 0 0 0 auto; padding: 9px; }
   .portal-shell main { padding: 24px 14px; }
   .portal-header { align-items: flex-start; }
   .working-form, .student-metrics { grid-template-columns: 1fr; }
