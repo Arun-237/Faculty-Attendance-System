@@ -30,14 +30,9 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   backdrop-filter: blur(14px);
 }
 .public-brand { display: flex; align-items: center; gap: 12px; border: 0; background: transparent; color: var(--navy); text-align: left; cursor: pointer; }
-.public-brand > span {
-  width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px;
-  background: var(--navy); color: var(--saffron); font-size: 11px; font-weight: 900;
-  box-shadow: 0 10px 24px rgba(19,34,56,.12);
-}
-.public-brand div { display: grid; }
 .public-brand strong { font-family: 'Fraunces', serif; font-size: 18px; }
 .public-brand small { color: var(--muted); margin-top: 2px; }
+.public-brand { display: grid; text-align: left; }
 .public-header nav { display: flex; gap: 34px; }
 .public-header nav a { color: #536072; text-decoration: none; font-weight: 700; }
 .public-header nav a:hover { color: var(--green); }
@@ -80,7 +75,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   border-radius: 24px; background: rgba(221,175,69,.48); transform: rotate(-2deg);
 }
 .hero-visual img {
-  position: relative; display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover;
+  position: relative; display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; object-position: center;
   border-radius: 22px; border: 1px solid var(--border); box-shadow: 0 24px 48px rgba(19,34,56,.16);
   background: #101a2d;
 }
@@ -140,10 +135,12 @@ footer { min-height: 76px; padding: 0 5%; display: flex; justify-content: space-
   display: flex; flex-direction: column; box-shadow: 12px 0 30px rgba(19,34,56,.08);
   position: relative;
 }
-.portal-brand {
-  width: 64px; height: 64px; border: 1px solid rgba(255,255,255,.12); border-radius: 18px;
-  background: var(--green); color: white; font-size: 11px; font-weight: 900; cursor: pointer;
-  box-shadow: 0 10px 22px rgba(47,111,94,.22);
+.portal-brand-text {
+  padding: 12px 8px 4px;
+  color: white;
+  font-family: 'Fraunces', serif;
+  font-size: 17px;
+  line-height: 1.15;
 }
 .portal-label { margin: 18px 8px; color: #bdc8c2; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
 .portal-shell aside nav { display: grid; gap: 7px; }
@@ -234,7 +231,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .portal-selection { margin-inline: 12px; }
   .portal-shell { grid-template-columns: 1fr; }
   .portal-shell aside { position: sticky; top: 0; z-index: 10; height: 82px; min-height: 82px; flex-direction: row; align-items: center; overflow-x: auto; }
-  .portal-brand { width: 48px; height: 48px; flex: 0 0 48px; }
+  .portal-brand-text { display: none; }
   .portal-label { display: none; }
   .portal-shell aside nav { display: flex; margin-left: 10px; }
   .portal-nav { white-space: nowrap; }

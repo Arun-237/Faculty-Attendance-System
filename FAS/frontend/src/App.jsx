@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import heroImage from './assets/hero.png'
+import heroImage from './assets/campus-hero.png'
 import './App.css'
 
 const accounts = {
@@ -609,7 +609,7 @@ function App() {
     return (
       <div className="portal-shell">
         <aside>
-          <button className="portal-brand" onClick={logout}><span>FAMS</span></button>
+          <div className="portal-brand-text">Faculty Attendance</div>
           <p className="portal-label">{activeRole} Portal</p>
           <nav>
             {portals[activeRole].map(([title]) => (
@@ -647,7 +647,7 @@ function App() {
   return (
     <div className="public-site">
       <header className="public-header">
-        <button className="public-brand" onClick={() => setView('home')}><span>FAMS</span><div><strong>Faculty Attendance</strong><small>Management System</small></div></button>
+        <div className="public-brand"><strong>Faculty Attendance</strong><small>Management System</small></div>
         <nav><a href="#academics">Academics</a><a href="#resources">Resources</a></nav>
         <button className="portal-button" onClick={() => document.getElementById('portals')?.scrollIntoView({ behavior: 'smooth' })}>Portal Login</button>
       </header>
@@ -661,7 +661,7 @@ function App() {
         </div>
         <div className="hero-visual">
           <div className="hero-image-accent" aria-hidden="true"></div>
-          <img src={heroImage} alt="Attendance management dashboard illustration" />
+          <img src={heroImage} alt="VVIT university campus building" />
         </div>
       </section>
 
