@@ -150,9 +150,8 @@ function App() {
       }))
       if (role !== 'Student') {
         if (role === 'HOD') await loadHodReport(credentials)
-        if (role === 'Faculty' || role === 'Administrator') {
+        if (role === 'Administrator') {
           await loadClassStudents(selectedClass, credentials)
-          await loadPortalReport(credentials)
         }
       }
       setView('portal')
@@ -316,8 +315,14 @@ function App() {
         if (saved.activeRole === 'Faculty') {
           setDailySubject(sessionDetails.subject || 'DSA')
         }
-        await loadClassStudents(selectedClass, saved.credentials, saved.activeRole)
-        await loadPortalReport(saved.credentials, reportFilterDate, reportFilterSubject, reportFilterClass, saved.activeRole)
+        if (saved.activeSection === 'Attendance') {
+          await loadClassStudents(selectedClass, saved.credentials, saved.activeRole)
+        }
+        if (saved.activeRole === 'Faculty') {
+          await loadPortalReport(saved.credentials, reportFilterDate, sessionDetails.subject || 'DSA', reportFilterClass, 'Faculty')
+        } else if (saved.activeSection === 'Attendance Report') {
+          await loadPortalReport(saved.credentials, reportFilterDate, reportFilterSubject, reportFilterClass, saved.activeRole)
+        }
       }
     } catch {
       sessionStorage.removeItem(portalSessionKey)
@@ -522,6 +527,11 @@ function App() {
   async function openSection(title) {
     setActiveSection(title)
     setError('')
+    if (title === 'Attendance') {
+      setAttendanceReport([])
+    } else if (title === 'Attendance Report') {
+      setClassStudents([])
+    }
     const storedSession = sessionStorage.getItem(portalSessionKey)
     if (storedSession) {
       try {
@@ -550,9 +560,18 @@ function App() {
       setApiResult(await response.json())
       if (activeRole === 'HOD') {
         await loadHodReport(credentials)
-      } else if (activeRole === 'Faculty' || activeRole === 'Administrator') {
-        await loadClassStudents(selectedClass, credentials)
-        await loadPortalReport(credentials)
+      } else if (activeRole === 'Faculty') {
+        if (title === 'Attendance') {
+          await loadClassStudents(selectedClass, credentials, 'Faculty')
+        } else {
+          await loadPortalReport(credentials, reportFilterDate, session?.subject || dailySubject, reportFilterClass, 'Faculty')
+        }
+      } else if (activeRole === 'Administrator') {
+        if (title === 'Attendance') {
+          await loadClassStudents(selectedClass, credentials, 'Administrator')
+        } else {
+          await loadPortalReport(credentials, reportFilterDate, reportFilterSubject, reportFilterClass, 'Administrator')
+        }
       } else {
         await loadStudentAttendance(credentials)
       }
@@ -632,8 +651,25 @@ function App() {
                   ? <label>Subject<input value={session?.subject || dailySubject} readOnly /></label>
                   : <label>Subject<select value={reportFilterSubject} onChange={(event) => setReportFilterSubject(event.target.value)}><option value="">All Subjects</option><option>DSA</option><option>DBMS</option><option>OS</option><option>Python</option><option>GenAI</option></select></label>}
                 <label>Class<select value={reportFilterClass} onChange={(event) => setReportFilterClass(event.target.value)}><option value="">All Classes</option><option>Class-A</option><option>Class-B</option></select></label>
-                <button type="button" onClick={() => loadPortalReport(portalCredentials)}>Filter Report</button>
-                <button type="button" className="text-mode" onClick={() => { setReportFilterDate(''); setReportFilterSubject(''); setReportFilterClass(''); loadPortalReport(portalCredentials, '', '', '') }}>Clear Filters</button>
+                <button type="button" onClick={() => loadPortalReport(
+                  portalCredentials,
+                  reportFilterDate,
+                  activeRole === 'Faculty' ? (session?.subject || dailySubject) : reportFilterSubject,
+                  reportFilterClass,
+                  activeRole
+                )}>Filter Report</button>
+                <button type="button" className="text-mode" onClick={() => {
+                  setReportFilterDate('')
+                  setReportFilterSubject('')
+                  setReportFilterClass('')
+                  loadPortalReport(
+                    portalCredentials,
+                    '',
+                    activeRole === 'Faculty' ? (session?.subject || dailySubject) : '',
+                    '',
+                    activeRole
+                  )
+                }}>Clear Filters</button>
               </div>
               <table className="data-table"><thead><tr><th>Date</th><th>Student ID</th><th>Name</th><th>Class</th><th>Subject</th><th>Status</th>{activeRole === 'Administrator' && <th>Update</th>}</tr></thead><tbody>
                 {attendanceReport.map((record) => {
